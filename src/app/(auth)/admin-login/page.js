@@ -1,26 +1,41 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Eye, EyeOff } from 'lucide-react'
+import { useRouter, useSearchParams } from 'next/navigation'
+import { createClient } from '@/lib/supabase/client'
+import { color, font, fontSize, radius, shadow } from '@/styles/tokens'
 
-function CrossLogo({ size = 48 }) {
+function BibleLogo({ size = 48 }) {
   return (
-    <svg width={size} height={size} viewBox="0 0 36 36">
-      <rect x="15" y="2" width="6" height="32" rx="3" fill="var(--cream)" />
-      <rect x="2" y="14" width="32" height="6" rx="3" fill="var(--gold)" />
+    <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
+      <path d="M24 10 C20 9 10 9 7 11 L7 38 C10 36 20 37 24 38 Z" fill="rgba(245,240,232,0.85)" />
+      <path d="M24 10 C28 9 38 9 41 11 L41 38 C38 36 28 37 24 38 Z" fill="rgba(245,240,232,0.85)" />
+      <rect x="22.5" y="9" width="3" height="30" rx="1.5" fill={color.cream} />
+      <rect x="30.5" y="15" width="2.5" height="14" rx="1.25" fill={color.gold} />
+      <rect x="25.5" y="20" width="12" height="2.5" rx="1.25" fill={color.gold} />
+      <path d="M37 9 L37 16 L35 14.5 L33 16 L33 9 Z" fill={color.gold} />
     </svg>
   )
 }
 
-// Mock credentials — replace with Supabase auth later
-const MOCK_ADMIN = {
-  email:    'admin@covenant.org',
-  password: 'admin123',
+const AUTH_ERRORS = {
+  'Invalid login credentials': 'Incorrect email or password.',
+  'Email not confirmed':       'Please confirm your email before signing in.',
+  'Too many requests':         'Too many attempts. Please wait a moment and try again.',
+}
+
+function friendlyError(msg) {
+  for (const [key, val] of Object.entries(AUTH_ERRORS)) {
+    if (msg?.includes(key)) return val
+  }
+  return msg || 'Sign in failed. Please try again.'
 }
 
 export default function AdminLoginPage() {
-  const router = useRouter()
+  const router       = useRouter()
+  const searchParams = useSearchParams()
+  const registered   = searchParams.get('registered')
+  const supabase     = createClient()
 
   const [email, setEmail]       = useState('')
   const [password, setPassword] = useState('')
@@ -30,254 +45,149 @@ export default function AdminLoginPage() {
 
   async function handleLogin() {
     setError('')
-    if (!email || !password) {
-      setError('Please enter your email and password.')
-      return
-    }
-    setLoading(true)
-    await new Promise(r => setTimeout(r, 800))
+    if (!email.trim()) { setError('Email is required.'); return }
+    if (!password)     { setError('Password is required.'); return }
 
-    if (email !== MOCK_ADMIN.email || password !== MOCK_ADMIN.password) {
-      setError('Incorrect email or password.')
+    setLoading(true)
+
+    const { error: authError } = await supabase.auth.signInWithPassword({
+      email:    email.trim().toLowerCase(),
+      password,
+    })
+
+    if (authError) {
+      setError(friendlyError(authError.message))
       setLoading(false)
       return
     }
 
     router.push('/dashboard')
+    router.refresh()
   }
 
   return (
-    <div style={styles.page}>
-
-      {/* Left panel — navy (desktop only) */}
-      <div style={styles.leftPanel}>
-        <CrossLogo size={56} />
-        <h1 style={styles.leftTitle}>Sunday School</h1>
-        <p style={styles.leftSub}>
-          Attendance & offering management for your church
+    <div style={s.page}>
+      {/* Left panel — desktop only */}
+      <div style={s.left}>
+        <BibleLogo size={52} />
+        <h1 style={s.leftTitle}>Sunday School</h1>
+        <p style={s.leftSub}>
+          Attendance and offering management for your church — simple, fast, and reliable.
         </p>
-        <div style={styles.leftFeatures}>
+        <div style={s.features}>
           {[
             'Track attendance across all classes',
-            'Record and tally offerings',
-            'Generate printable reports',
-            'Manage members & classes',
+            'Record individual member offerings',
+            'Follow up with absent members',
+            'Generate church-wide reports',
           ].map(f => (
-            <div key={f} style={styles.leftFeatureRow}>
-              <div style={styles.leftFeatureDot} />
-              <span style={styles.leftFeatureText}>{f}</span>
+            <div key={f} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: color.gold, flexShrink: 0 }} />
+              <span style={{ fontSize: fontSize.base, color: 'rgba(245,240,232,0.75)' }}>{f}</span>
             </div>
           ))}
         </div>
       </div>
 
       {/* Right panel — form */}
-      <div style={styles.rightPanel}>
-        <div style={styles.formCard}>
+      <div style={s.right}>
+        <div style={s.card}>
 
-          {/* Mobile logo */}
-          <div style={styles.mobileLogo}>
-            <svg width="36" height="36" viewBox="0 0 36 36">
-              <rect x="15" y="2" width="6" height="32" rx="3" fill="var(--navy)" />
-              <rect x="2" y="14" width="32" height="6" rx="3" fill="var(--gold)" />
-            </svg>
-          </div>
-
-          <h2 style={styles.formTitle}>Admin Sign In</h2>
-          <p style={styles.formSub}>Covenant Chapel · Lagos</p>
-
-          {/* Email */}
-          <div style={styles.field}>
-            <label style={styles.label}>Email Address</label>
-            <input
-              className="input"
-              type="email"
-              placeholder="admin@church.org"
-              value={email}
-              onChange={e => { setEmail(e.target.value); setError('') }}
-              onKeyDown={e => e.key === 'Enter' && handleLogin()}
-              style={{ background: '#fff' }}
-            />
-          </div>
-
-          {/* Password */}
-          <div style={styles.field}>
-            <label style={styles.label}>Password</label>
-            <div style={{ position: 'relative' }}>
-              <input
-                className="input"
-                type={showPw ? 'text' : 'password'}
-                placeholder="••••••••"
-                value={password}
-                onChange={e => { setPassword(e.target.value); setError('') }}
-                onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                style={{ background: '#fff', paddingRight: '44px' }}
-              />
-              <button
-                onClick={() => setShowPw(p => !p)}
-                style={styles.eyeBtn}
-                type="button"
-              >
-                {showPw
-                  ? <EyeOff size={16} color="var(--mist)" />
-                  : <Eye    size={16} color="var(--mist)" />
-                }
-              </button>
-            </div>
-          </div>
-
-          {/* Error */}
-          {error && (
-            <div style={styles.errorBox}>
-              <p style={{ fontSize: '13px', color: 'var(--error)', fontWeight: '600', margin: 0 }}>
-                {error}
+          {registered && (
+            <div style={{ background: color.successBg, border: `1px solid ${color.successBorder}`, borderRadius: radius.sm, padding: '12px 16px' }}>
+              <p style={{ fontSize: fontSize.sm, fontWeight: '600', color: color.success, margin: 0 }}>
+                ✓ Account created successfully. Sign in below.
               </p>
             </div>
           )}
 
-          {/* Submit */}
+          <div>
+            <h2 style={{ fontFamily: font.display, fontSize: fontSize.xl, color: color.navy, margin: '0 0 4px' }}>
+              Admin Sign In
+            </h2>
+            <p style={{ fontSize: fontSize.sm, color: color.mist, margin: 0 }}>
+              Welcome back — sign in to your dashboard.
+            </p>
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <div style={s.field}>
+              <label style={s.label}>Email Address</label>
+              <input
+                className="input"
+                type="email"
+                placeholder="admin@church.org"
+                value={email}
+                onChange={e => { setEmail(e.target.value); setError('') }}
+                onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                autoFocus
+                style={{ background: color.white }}
+              />
+            </div>
+
+            <div style={s.field}>
+              <label style={s.label}>Password</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  className="input"
+                  type={showPw ? 'text' : 'password'}
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={e => { setPassword(e.target.value); setError('') }}
+                  onKeyDown={e => e.key === 'Enter' && handleLogin()}
+                  style={{ background: color.white, paddingRight: '48px' }}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPw(p => !p)}
+                  style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: '4px' }}
+                >
+                  {showPw
+                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color.mist} strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color.mist} strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                  }
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {error && (
+            <div style={{ background: color.errorBg, border: `1px solid rgba(220,38,38,0.2)`, borderRadius: radius.sm, padding: '12px 16px' }}>
+              <p style={{ fontSize: fontSize.sm, color: color.error, fontWeight: '600', margin: 0 }}>{error}</p>
+            </div>
+          )}
+
           <button
             className="btn btn-primary btn-full btn-lg"
             onClick={handleLogin}
             disabled={loading}
-            style={{ marginTop: '4px' }}
           >
             {loading ? 'Signing in…' : 'Sign In'}
           </button>
 
-          {/* Demo hint */}
-          <div style={styles.demoHint}>
-            <p style={{ fontSize: '11px', color: 'var(--mist)', margin: 0, textAlign: 'center' }}>
-              Demo: <strong>admin@covenant.org</strong> / <strong>admin123</strong>
-            </p>
-          </div>
-
+          <p style={{ fontSize: fontSize.sm, color: color.mist, textAlign: 'center', margin: 0 }}>
+            New church?{' '}
+            <button
+              onClick={() => router.push('/register')}
+              style={{ background: 'none', border: 'none', cursor: 'pointer', color: color.navy, fontWeight: '700', fontSize: fontSize.sm, fontFamily: font.body }}
+            >
+              Create a free account →
+            </button>
+          </p>
         </div>
       </div>
     </div>
   )
 }
 
-const styles = {
-  page: {
-    minHeight: '100vh',
-    display: 'flex',
-    flexDirection: 'row',
-  },
-  leftPanel: {
-    background: 'var(--navy)',
-    flex: '0 0 420px',
-    padding: '60px 48px',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    gap: '20px',
-    // Hide on mobile
-    '@media (max-width: 767px)': { display: 'none' },
-  },
-  leftTitle: {
-    fontFamily: 'var(--font-display)',
-    fontSize: '32px',
-    color: 'var(--cream)',
-    margin: 0,
-  },
-  leftSub: {
-    fontSize: '15px',
-    color: 'rgba(245,240,232,0.55)',
-    lineHeight: 1.6,
-    maxWidth: '300px',
-  },
-  leftFeatures: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-    marginTop: '12px',
-  },
-  leftFeatureRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-  },
-  leftFeatureDot: {
-    width: '6px',
-    height: '6px',
-    borderRadius: '50%',
-    background: 'var(--gold)',
-    flexShrink: 0,
-  },
-  leftFeatureText: {
-    fontSize: '14px',
-    color: 'rgba(245,240,232,0.75)',
-  },
-  rightPanel: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '40px 24px',
-    background: 'var(--cream)',
-  },
-  formCard: {
-    background: '#fff',
-    borderRadius: 'var(--radius-xl)',
-    boxShadow: 'var(--shadow-modal)',
-    padding: '40px 32px',
-    width: '100%',
-    maxWidth: '400px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '16px',
-  },
-  mobileLogo: {
-    display: 'none',
-    justifyContent: 'center',
-    marginBottom: '4px',
-  },
-  formTitle: {
-    fontFamily: 'var(--font-display)',
-    fontSize: '26px',
-    color: 'var(--navy)',
-    margin: 0,
-  },
-  formSub: {
-    fontSize: '13px',
-    color: 'var(--mist)',
-    margin: '-8px 0 4px',
-  },
-  field: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  label: {
-    fontSize: '12px',
-    fontWeight: '600',
-    color: 'var(--mist)',
-    letterSpacing: '0.05em',
-    textTransform: 'uppercase',
-  },
-  eyeBtn: {
-    position: 'absolute',
-    right: '12px',
-    top: '50%',
-    transform: 'translateY(-50%)',
-    background: 'none',
-    border: 'none',
-    cursor: 'pointer',
-    display: 'flex',
-    alignItems: 'center',
-    padding: '4px',
-  },
-  errorBox: {
-    background: 'rgba(220,38,38,0.06)',
-    border: '1px solid rgba(220,38,38,0.2)',
-    borderRadius: 'var(--radius-sm)',
-    padding: '10px 14px',
-  },
-  demoHint: {
-    background: 'var(--cream)',
-    borderRadius: 'var(--radius-sm)',
-    padding: '10px 14px',
-    marginTop: '4px',
-  },
+const s = {
+  page:      { minHeight: '100vh', display: 'flex', fontFamily: font.body },
+  left:      { background: color.navy, flex: '0 0 420px', padding: '60px 48px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '24px' },
+  leftTitle: { fontFamily: font.display, fontSize: '2.25rem', color: color.cream, margin: 0 },
+  leftSub:   { fontSize: fontSize.base, color: 'rgba(245,240,232,0.55)', lineHeight: 1.7, maxWidth: '300px' },
+  features:  { display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '8px' },
+  right:     { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px', background: color.cream },
+  card:      { background: color.white, borderRadius: radius.xl, boxShadow: shadow.modal, padding: '40px 32px', width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', gap: '20px' },
+  field:     { display: 'flex', flexDirection: 'column', gap: '8px' },
+  label:     { fontSize: '11px', fontWeight: '700', color: color.mist, letterSpacing: '0.07em', textTransform: 'uppercase' },
 }

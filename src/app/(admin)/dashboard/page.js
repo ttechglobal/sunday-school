@@ -1,297 +1,234 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import { Check, Clock, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react'
+import { useState, useEffect, useCallback } from 'react'
+import { Check, Clock, AlertCircle } from 'lucide-react'
+import { SkeletonList } from '@/components/class/ui/LoadingSkeleton'
+import EmptyState from '@/components/class/ui/EmptyState'
+import { color, font, fontSize, radius, shadow } from '@/styles/tokens'
 
-// ── Mock data ─────────────────────────────────────────────────
-const MOCK_SESSION = {
-  isOpen: true,
-  date: 'Sunday, 15 June 2025',
-  submittedCount: 18,
-  totalClasses: 24,
+function formatNaira(amount) {
+  if (!amount) return '₦0'
+  if (amount >= 1000000) return `₦${(amount / 1000000).toFixed(1)}M`
+  if (amount >= 1000)    return `₦${(amount / 1000).toFixed(1)}k`
+  return `₦${Number(amount).toLocaleString('en-NG')}`
 }
 
-const MOCK_KPI = {
-  totalClasses:  24,
-  submitted:     18,
-  totalPresent:  346,
-  totalOffering: 12450000, // in kobo
-}
-
-const MOCK_CLASSES = [
-  { id: '1', name: 'Youth A',           group: 'Youth',   status: 'submitted', present: 22, offering: 850000,  submittedAt: '8:42 AM' },
-  { id: '2', name: 'Youth B',           group: 'Youth',   status: 'submitted', present: 19, offering: 620000,  submittedAt: '9:01 AM' },
-  { id: '3', name: 'Youth C',           group: 'Youth',   status: 'submitted', present: 25, offering: 780000,  submittedAt: '8:55 AM' },
-  { id: '4', name: "Men's Class A",     group: 'Men',     status: 'pending',   present: null, offering: null,  submittedAt: null },
-  { id: '5', name: "Men's Class B",     group: 'Men',     status: 'submitted', present: 30, offering: 1200000, submittedAt: '9:15 AM' },
-  { id: '6', name: "Women's Fellowship",group: 'Women',   status: 'not_submitted', present: null, offering: null, submittedAt: null },
-  { id: '7', name: 'Senior Adults',     group: 'Seniors', status: 'submitted', present: 18, offering: 410000,  submittedAt: '9:22 AM' },
-  { id: '8', name: 'Teens Class',       group: 'Youth',   status: 'submitted', present: 28, offering: 540000,  submittedAt: '8:38 AM' },
-  { id: '9', name: 'Children A',        group: 'Children',status: 'not_submitted', present: null, offering: null, submittedAt: null },
-]
-
-// ── Helpers ───────────────────────────────────────────────────
-function formatNaira(kobo) {
-  const naira = kobo / 100
-  if (naira >= 1000000) return `₦${(naira / 1000000).toFixed(1)}M`
-  if (naira >= 1000)    return `₦${(naira / 1000).toFixed(1)}k`
-  return `₦${naira.toLocaleString('en-NG')}`
-}
-
-function statusConfig(status) {
-  if (status === 'submitted')     return { label: 'Submitted',     cls: 'badge-green' }
-  if (status === 'pending')       return { label: 'Pending',       cls: 'badge-amber' }
-  return                                 { label: 'Not Submitted', cls: 'badge-red'   }
-}
-
-// ── KPI Card ──────────────────────────────────────────────────
-function KpiCard({ label, value, sub, color }) {
+function KpiCard({ label, value, sub, valueColor }) {
   return (
-    <div style={styles.kpiCard}>
-      <p style={{ fontSize: '10px', fontWeight: '700', letterSpacing: '0.06em', color: 'var(--mist)', margin: '0 0 8px' }}>
-        {label}
-      </p>
-      <p style={{
-        fontFamily: 'var(--font-display)',
-        fontSize: '28px', fontWeight: '700',
-        color: color || 'var(--navy)', margin: 0, lineHeight: 1,
-      }}>
-        {value}
-      </p>
-      {sub && (
-        <p style={{ fontSize: '11px', color: 'var(--mist)', margin: '6px 0 0' }}>{sub}</p>
+    <div style={{ background: '#fff', borderRadius: radius.lg, boxShadow: shadow.card, padding: '20px' }}>
+      <p style={{ fontSize: '11px', fontWeight: '700', letterSpacing: '0.06em', color: color.mist, margin: '0 0 10px', textTransform: 'uppercase' }}>{label}</p>
+      <p style={{ fontFamily: font.display, fontSize: '28px', fontWeight: '700', color: valueColor || color.navy, margin: '0 0 6px', lineHeight: 1 }}>{value}</p>
+      {sub && <p style={{ fontSize: fontSize.sm, color: color.mist, margin: 0 }}>{sub}</p>}
+    </div>
+  )
+}
+
+function StatusChip({ status }) {
+  const cfg = {
+    submitted:     { label: 'Submitted',     cls: 'badge-green' },
+    pending:       { label: 'Pending',       cls: 'badge-amber' },
+    not_submitted: { label: 'Not Submitted', cls: 'badge-red'   },
+  }[status] || { label: status, cls: 'badge-mist' }
+  return <span className={`badge ${cfg.cls}`}>{cfg.label}</span>
+}
+
+export default function DashboardPage() {
+  const [data, setData]           = useState(null)
+  const [loading, setLoading]     = useState(true)
+  const [toggling, setToggling]   = useState(false)
+  const [error, setError]         = useState('')
+
+  const fetchDashboard = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res  = await fetch('/api/admin/dashboard')
+      const json = await res.json()
+      if (res.ok) setData(json)
+      else setError(json.error || 'Failed to load dashboard.')
+    } catch {
+      setError('Connection error.')
+    } finally {
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => { fetchDashboard() }, [fetchDashboard])
+
+  async function toggleSession() {
+    if (!data?.session) return
+    setToggling(true)
+    try {
+      const res  = await fetch(`/api/admin/sessions/${data.session.id}/toggle`, {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ isOpen: !data.session.is_open }),
+      })
+      if (res.ok) await fetchDashboard()
+    } finally {
+      setToggling(false)
+    }
+  }
+
+  const today = new Intl.DateTimeFormat('en-NG', {
+    weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+  }).format(new Date())
+
+  const isToday = new Date().getDay() === 0 // Sunday
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+          <SkeletonList count={4} height={100} />
+        </div>
+        <SkeletonList count={4} height={60} />
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div style={{ background: color.errorBg, borderRadius: radius.lg, padding: '20px' }}>
+        <p style={{ color: color.error, margin: 0 }}>{error}</p>
+      </div>
+    )
+  }
+
+  const session       = data?.session
+  const classes       = data?.classes || []
+  const submitted     = classes.filter(c => c.status === 'submitted')
+  const pending       = classes.filter(c => c.status === 'pending')
+  const notSubmitted  = classes.filter(c => c.status === 'not_submitted')
+  const progressPct   = classes.length > 0 ? Math.round((submitted.length / classes.length) * 100) : 0
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+      {/* Header */}
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '14px' }}>
+        <div>
+          <h1 style={{ fontFamily: font.display, fontSize: fontSize.xl, color: color.navy, margin: '0 0 4px' }}>Dashboard</h1>
+          <p style={{ fontSize: fontSize.sm, color: color.mist, margin: 0 }}>{today}</p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+          {session && (
+            <>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: '7px',
+                background: session.is_open ? color.successBg : color.errorBg,
+                border: `1px solid ${session.is_open ? color.successBorder : 'rgba(220,38,38,0.2)'}`,
+                padding: '6px 14px', borderRadius: radius.full,
+              }}>
+                <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: session.is_open ? color.success : color.error }} />
+                <span style={{ fontSize: fontSize.sm, fontWeight: '700', color: session.is_open ? '#15803D' : color.error }}>
+                  {session.is_open ? 'Session Open' : 'Session Closed'}
+                </span>
+              </div>
+              <button
+                className={`btn btn-sm ${session.is_open ? 'btn-danger' : 'btn-primary'}`}
+                onClick={toggleSession}
+                disabled={toggling}
+              >
+                {toggling ? 'Updating…' : session.is_open ? 'Close Session' : 'Open Session'}
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* No session today */}
+      {!session && !isToday && (
+        <EmptyState
+          icon="📅"
+          title="No session today"
+          message="Sessions are created automatically on Sundays when a class logs in. Come back on Sunday!"
+        />
+      )}
+
+      {!session && isToday && (
+        <div style={{ background: color.warningBg, border: `1px solid #FDE68A`, borderRadius: radius.lg, padding: '20px' }}>
+          <p style={{ fontSize: fontSize.base, fontWeight: '700', color: '#92400E', margin: '0 0 4px' }}>
+            Today's session hasn't started yet
+          </p>
+          <p style={{ fontSize: fontSize.sm, color: '#92400E', margin: 0 }}>
+            A session will be created automatically when the first class logs in and submits attendance.
+          </p>
+        </div>
+      )}
+
+      {/* KPI cards */}
+      {session && (
+        <>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' }}>
+            <KpiCard label="Total Classes"   value={classes.length}       sub="in your church" />
+            <KpiCard label="Submitted"       value={`${submitted.length}/${classes.length}`} sub={`${progressPct}% complete`} valueColor={color.success} />
+            <KpiCard label="Total Present"   value={(data?.totalPresent || 0).toLocaleString()} sub="members church-wide" />
+            <KpiCard label="Total Offering"  value={formatNaira(data?.totalOffering || 0)} sub="this Sunday" valueColor={color.gold} />
+          </div>
+
+          {/* Progress */}
+          <div style={{ background: '#fff', borderRadius: radius.lg, boxShadow: shadow.card, padding: '20px' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <p style={{ fontSize: fontSize.base, fontWeight: '700', color: color.navy, margin: 0 }}>Submission Progress</p>
+              <p style={{ fontSize: fontSize.sm, color: color.mist, margin: 0 }}>{submitted.length} of {classes.length} classes</p>
+            </div>
+            <div style={{ height: '8px', background: color.creamDark, borderRadius: '99px', overflow: 'hidden', marginBottom: '14px' }}>
+              <div style={{ width: `${progressPct}%`, height: '100%', background: color.navy, borderRadius: '99px', transition: 'width 0.4s ease' }} />
+            </div>
+            <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap' }}>
+              {[
+                { icon: <Check size={13} />, count: submitted.length,    label: 'submitted',     col: color.success },
+                { icon: <Clock size={13} />, count: pending.length,      label: 'pending',       col: color.warning },
+                { icon: <AlertCircle size={13} />, count: notSubmitted.length, label: 'not submitted', col: color.error },
+              ].map(s => (
+                <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: '5px', color: s.col }}>
+                  {s.icon}
+                  <span style={{ fontSize: fontSize.sm, fontWeight: '600' }}>{s.count} {s.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Class list */}
+          <div style={{ background: '#fff', borderRadius: radius.lg, boxShadow: shadow.card, overflow: 'hidden' }}>
+            <div style={{ padding: '18px 20px', borderBottom: `1px solid ${color.creamDark}` }}>
+              <p style={{ fontSize: fontSize.base, fontWeight: '700', color: color.navy, margin: 0 }}>All Classes Today</p>
+            </div>
+            {classes.length === 0 ? (
+              <div style={{ padding: '40px', textAlign: 'center', color: color.mist }}>No class data yet.</div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column' }}>
+                {classes.map((cls, i) => (
+                  <div key={cls.id} style={{
+                    display: 'flex', alignItems: 'center', gap: '14px',
+                    padding: '14px 20px',
+                    borderBottom: i < classes.length - 1 ? `1px solid ${color.creamDark}` : 'none',
+                    flexWrap: 'wrap',
+                  }}>
+                    <div style={{ flex: 2, minWidth: '120px' }}>
+                      <p style={{ fontSize: fontSize.base, fontWeight: '600', color: color.navy, margin: '0 0 2px' }}>{cls.name}</p>
+                      {cls.group_name && <span className="badge badge-mist" style={{ fontSize: '10px' }}>{cls.group_name}</span>}
+                    </div>
+                    <div style={{ flex: 1, textAlign: 'center', minWidth: '60px' }}>
+                      <p style={{ fontSize: fontSize.md, fontWeight: '700', color: cls.present != null ? color.navy : color.mist, margin: 0 }}>{cls.present ?? '—'}</p>
+                      <p style={{ fontSize: '10px', color: color.mist, margin: 0 }}>present</p>
+                    </div>
+                    <div style={{ flex: 1, textAlign: 'center', minWidth: '80px' }}>
+                      <p style={{ fontSize: fontSize.md, fontWeight: '700', color: cls.offering ? color.gold : color.mist, margin: 0 }}>
+                        {cls.offering ? formatNaira(cls.offering) : '—'}
+                      </p>
+                      <p style={{ fontSize: '10px', color: color.mist, margin: 0 }}>offering</p>
+                    </div>
+                    <div style={{ flexShrink: 0 }}>
+                      <StatusChip status={cls.status} />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
       )}
     </div>
   )
-}
-
-// ── Class row ─────────────────────────────────────────────────
-function ClassRow({ cls }) {
-  const [expanded, setExpanded] = useState(false)
-  const { label, cls: badgeCls } = statusConfig(cls.status)
-
-  return (
-    <div style={styles.classRow}>
-      <div style={styles.classRowMain}>
-        {/* Name + group */}
-        <div style={{ flex: 2, minWidth: 0 }}>
-          <p style={{ fontSize: '14px', fontWeight: '600', color: 'var(--navy)', margin: 0 }}>
-            {cls.name}
-          </p>
-          <span className="badge badge-mist" style={{ fontSize: '9px', marginTop: '3px' }}>
-            {cls.group}
-          </span>
-        </div>
-
-        {/* Present */}
-        <div style={{ flex: 1, textAlign: 'center' }}>
-          <p style={{ fontSize: '15px', fontWeight: '700', color: cls.present ? 'var(--navy)' : 'var(--mist)', margin: 0 }}>
-            {cls.present ?? '—'}
-          </p>
-          <p style={{ fontSize: '10px', color: 'var(--mist)', margin: 0 }}>present</p>
-        </div>
-
-        {/* Offering */}
-        <div style={{ flex: 1, textAlign: 'center' }}>
-          <p style={{ fontSize: '15px', fontWeight: '700', color: cls.offering ? 'var(--gold)' : 'var(--mist)', margin: 0 }}>
-            {cls.offering ? formatNaira(cls.offering) : '—'}
-          </p>
-          <p style={{ fontSize: '10px', color: 'var(--mist)', margin: 0 }}>offering</p>
-        </div>
-
-        {/* Status + time */}
-        <div style={{ flex: 1.5, display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '4px' }}>
-          <span className={`badge ${badgeCls}`}>{label}</span>
-          {cls.submittedAt && (
-            <span style={{ fontSize: '10px', color: 'var(--mist)' }}>{cls.submittedAt}</span>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-// ── Main Dashboard ────────────────────────────────────────────
-export default function DashboardPage() {
-  const [sessionOpen, setSessionOpen] = useState(MOCK_SESSION.isOpen)
-  const [toggling, setToggling]       = useState(false)
-
-  async function toggleSession() {
-    setToggling(true)
-    await new Promise(r => setTimeout(r, 600))
-    setSessionOpen(p => !p)
-    setToggling(false)
-  }
-
-  const submitted    = MOCK_CLASSES.filter(c => c.status === 'submitted')
-  const pending      = MOCK_CLASSES.filter(c => c.status === 'pending')
-  const notSubmitted = MOCK_CLASSES.filter(c => c.status === 'not_submitted')
-  const progressPct  = Math.round((submitted.length / MOCK_CLASSES.length) * 100)
-
-  return (
-    <div style={styles.page}>
-
-      {/* ── Page header ── */}
-      <div style={styles.pageHeader}>
-        <div>
-          <h1 style={styles.pageTitle}>Dashboard</h1>
-          <p style={styles.pageDate}>{MOCK_SESSION.date}</p>
-        </div>
-
-        {/* Session toggle */}
-        <div style={styles.sessionControls}>
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            background: sessionOpen ? '#DCFCE7' : '#FEE2E2',
-            border: `1px solid ${sessionOpen ? '#BBF7D0' : '#FECACA'}`,
-            padding: '6px 12px', borderRadius: 'var(--radius-full)',
-          }}>
-            <div style={{
-              width: '8px', height: '8px', borderRadius: '50%',
-              background: sessionOpen ? 'var(--success)' : 'var(--error)',
-            }} />
-            <span style={{
-              fontSize: '12px', fontWeight: '700',
-              color: sessionOpen ? '#15803D' : '#991B1B',
-            }}>
-              {sessionOpen ? 'Session Open' : 'Session Closed'}
-            </span>
-          </div>
-          <button
-            className={`btn ${sessionOpen ? 'btn-danger' : 'btn-primary'} btn-sm`}
-            onClick={toggleSession}
-            disabled={toggling}
-          >
-            {toggling
-              ? 'Updating…'
-              : sessionOpen ? 'Close Session' : 'Open Session'
-            }
-          </button>
-        </div>
-      </div>
-
-      {/* ── KPI cards ── */}
-      <div style={styles.kpiGrid}>
-        <KpiCard
-          label="TOTAL CLASSES"
-          value={MOCK_KPI.totalClasses}
-          sub="active this session"
-        />
-        <KpiCard
-          label="SUBMITTED"
-          value={`${MOCK_KPI.submitted}/${MOCK_KPI.totalClasses}`}
-          sub={`${progressPct}% complete`}
-          color="var(--success)"
-        />
-        <KpiCard
-          label="TOTAL PRESENT"
-          value={MOCK_KPI.totalPresent.toLocaleString()}
-          sub="members church-wide"
-          color="var(--navy)"
-        />
-        <KpiCard
-          label="TOTAL OFFERING"
-          value={formatNaira(MOCK_KPI.totalOffering)}
-          sub="this Sunday"
-          color="var(--gold)"
-        />
-      </div>
-
-      {/* ── Progress bar ── */}
-      <div style={styles.progressCard}>
-        <div style={styles.progressHeader}>
-          <p style={{ fontSize: '14px', fontWeight: '700', color: 'var(--navy)', margin: 0 }}>
-            Today's Submissions
-          </p>
-          <p style={{ fontSize: '13px', color: 'var(--mist)', margin: 0 }}>
-            {submitted.length} of {MOCK_CLASSES.length} classes · {progressPct}%
-          </p>
-        </div>
-        <div style={styles.progressTrack}>
-          <div style={{ ...styles.progressFill, width: `${progressPct}%` }} />
-        </div>
-
-        {/* Quick stats row */}
-        <div style={styles.quickStats}>
-          <div style={styles.quickStat}>
-            <Check size={13} color="var(--success)" />
-            <span style={{ fontSize: '12px', color: 'var(--success)', fontWeight: '600' }}>
-              {submitted.length} submitted
-            </span>
-          </div>
-          <div style={styles.quickStat}>
-            <Clock size={13} color="var(--warning)" />
-            <span style={{ fontSize: '12px', color: 'var(--warning)', fontWeight: '600' }}>
-              {pending.length} pending
-            </span>
-          </div>
-          <div style={styles.quickStat}>
-            <AlertCircle size={13} color="var(--error)" />
-            <span style={{ fontSize: '12px', color: 'var(--error)', fontWeight: '600' }}>
-              {notSubmitted.length} not submitted
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Class list ── */}
-      <div style={styles.classTable}>
-        <div style={styles.classTableHeader}>
-          <p style={{ fontSize: '14px', fontWeight: '700', color: 'var(--navy)', margin: 0 }}>
-            All Classes
-          </p>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', padding: '12px' }}>
-          {/* Submitted */}
-          {submitted.length > 0 && (
-            <>
-              <p style={styles.groupLabel}>✅ Submitted ({submitted.length})</p>
-              {submitted.map(c => <ClassRow key={c.id} cls={c} />)}
-            </>
-          )}
-
-          {/* Pending */}
-          {pending.length > 0 && (
-            <>
-              <p style={{ ...styles.groupLabel, marginTop: '12px' }}>⏳ Pending ({pending.length})</p>
-              {pending.map(c => <ClassRow key={c.id} cls={c} />)}
-            </>
-          )}
-
-          {/* Not submitted */}
-          {notSubmitted.length > 0 && (
-            <>
-              <p style={{ ...styles.groupLabel, marginTop: '12px' }}>❌ Not Submitted ({notSubmitted.length})</p>
-              {notSubmitted.map(c => <ClassRow key={c.id} cls={c} />)}
-            </>
-          )}
-        </div>
-      </div>
-
-    </div>
-  )
-}
-
-// ── Styles ────────────────────────────────────────────────────
-const styles = {
-  page:           { display: 'flex', flexDirection: 'column', gap: '20px' },
-  pageHeader:     { display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px' },
-  pageTitle:      { fontFamily: 'var(--font-display)', fontSize: '28px', color: 'var(--navy)', margin: '0 0 4px' },
-  pageDate:       { fontSize: '13px', color: 'var(--mist)', margin: 0 },
-  sessionControls:{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' },
-  kpiGrid:        { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '12px' },
-  kpiCard:        { background: '#fff', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)', padding: '20px' },
-  progressCard:   { background: '#fff', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)', padding: '20px', display: 'flex', flexDirection: 'column', gap: '12px' },
-  progressHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  progressTrack:  { height: '8px', background: 'var(--cream-dark)', borderRadius: '99px', overflow: 'hidden' },
-  progressFill:   { height: '100%', background: 'var(--navy)', borderRadius: '99px', transition: 'width 0.4s ease' },
-  quickStats:     { display: 'flex', gap: '20px', flexWrap: 'wrap' },
-  quickStat:      { display: 'flex', alignItems: 'center', gap: '5px' },
-  classTable:     { background: '#fff', borderRadius: 'var(--radius-lg)', boxShadow: 'var(--shadow-card)', overflow: 'hidden' },
-  classTableHeader: { padding: '16px 20px', borderBottom: '1px solid var(--cream-dark)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
-  classRow:       { background: 'var(--cream)', borderRadius: 'var(--radius-md)', padding: '12px 14px', marginBottom: '2px' },
-  classRowMain:   { display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' },
-  groupLabel:     { fontSize: '11px', fontWeight: '700', letterSpacing: '0.05em', color: 'var(--mist)', margin: '0 0 6px', paddingLeft: '4px' },
 }

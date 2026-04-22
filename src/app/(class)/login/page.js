@@ -32,26 +32,38 @@ export default function ClassLoginPage() {
   }
 
   async function handleSubmit() {
-    const trimmed = code.replace(/-/g, '')
+    const trimmed = code.replace(/-/g, '').toUpperCase()
     if (trimmed.length < 6) {
       setError('Please enter a complete class code.')
       return
     }
     setLoading(true)
-    await new Promise(r => setTimeout(r, 600))
+    setError('')
 
-    const found = MOCK_CODES[trimmed]
-    if (!found) {
-      setError('Code not found. Check with your Sunday School admin.')
-      setCode('')
-      setShake(true)
-      setTimeout(() => setShake(false), 500)
+    try {
+      const res = await fetch('/api/class/auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ code: trimmed }),
+      })
+
+      const data = await res.json()
+
+      if (!res.ok) {
+        setError(data.error || 'Code not found. Check with your admin.')
+        setCode('')
+        setShake(true)
+        setTimeout(() => setShake(false), 500)
+        setLoading(false)
+        return
+      }
+
+      router.push('/home')
+
+    } catch {
+      setError('Connection error. Please try again.')
       setLoading(false)
-      return
     }
-
-    // TODO: save class info to cookie/session, then redirect
-    router.push('/home')
   }
 
   const displayCode = code.length > 4 ? code.slice(0, 4) + '-' + code.slice(4) : code
