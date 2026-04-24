@@ -1,77 +1,113 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
-
+import {
+  LayoutDashboard, Users, BookOpen,
+  FileText, BarChart2, Settings,
+  Menu, X, LogOut, ChevronRight,
+  CheckSquare,
+} from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { color, font, fontSize, radius } from '@/styles/tokens'
 
-import {
-  LayoutDashboard, CalendarDays, GraduationCap,
-  Users, FileText, LogOut, Menu, X, Settings,
-} from 'lucide-react'
-
 const NAV = [
-  { label: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-  { label: 'Sessions',  href: '/sessions',  icon: CalendarDays    },
-  { label: 'Classes',   href: '/classes',   icon: GraduationCap   },
-  { label: 'Members',   href: '/members',   icon: Users           },
-  { label: 'Reports',   href: '/reports',   icon: FileText        },
-  { label: 'Settings',  href: '/settings',  icon: Settings        },
+  { id: 'dashboard', label: 'Dashboard', href: '/dashboard',     Icon: LayoutDashboard },
+  { id: 'approvals', label: 'Approvals', href: '/approvals',     Icon: CheckSquare     },
+  { id: 'records',   label: 'Records',   href: '/admin-records', Icon: FileText        },
+  { id: 'classes',   label: 'Classes',   href: '/classes',       Icon: BookOpen        },
+  { id: 'members',   label: 'Members',   href: '/members',       Icon: Users           },
+  { id: 'reports',   label: 'Reports',   href: '/reports',       Icon: BarChart2       },
+  { id: 'settings',  label: 'Settings',  href: '/settings',      Icon: Settings        },
 ]
+
+const DESKTOP_BP = 768
 
 function BibleLogo({ size = 28 }) {
   return (
     <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
-      <path d="M24 10 C20 9 10 9 7 11 L7 38 C10 36 20 37 24 38 Z" fill="rgba(245,240,232,0.85)" />
-      <path d="M24 10 C28 9 38 9 41 11 L41 38 C38 36 28 37 24 38 Z" fill="rgba(245,240,232,0.85)" />
-      <rect x="22.5" y="9" width="3" height="30" rx="1.5" fill={color.cream} />
+      <rect width="48" height="48" rx="12" fill={color.navyLight} />
+      <path d="M24 10 C20 9 10 9 7 11 L7 38 C10 36 20 37 24 38 Z" fill="rgba(250,246,240,0.9)" />
+      <path d="M24 10 C28 9 38 9 41 11 L41 38 C38 36 28 37 24 38 Z" fill="rgba(250,246,240,0.9)" />
+      <rect x="22.5" y="9"  width="3"   height="30" rx="1.5"  fill={color.cream} />
       <rect x="30.5" y="15" width="2.5" height="14" rx="1.25" fill={color.gold} />
-      <rect x="25.5" y="20" width="12" height="2.5" rx="1.25" fill={color.gold} />
+      <rect x="25.5" y="20" width="12"  height="2.5" rx="1.25" fill={color.gold} />
       <path d="M37 9 L37 16 L35 14.5 L33 16 L33 9 Z" fill={color.gold} />
     </svg>
   )
 }
 
 function NavItem({ item, active, onClick }) {
-  const Icon = item.icon
   return (
     <button
       onClick={onClick}
       style={{
-        display:        'flex',
-        alignItems:     'center',
-        gap:            '11px',
-        padding:        '11px 16px',
-        borderRadius:   radius.md,
-        border:         'none',
-        borderLeft:     `3px solid ${active ? color.gold : 'transparent'}`,
-        background:     active ? 'rgba(245,240,232,0.1)' : 'transparent',
-        cursor:         'pointer',
-        width:          '100%',
-        textAlign:      'left',
-        transition:     'all 0.15s ease',
-        marginBottom:   '2px',
+        display:      'flex',
+        alignItems:   'center',
+        gap:          '10px',
+        padding:      '10px 16px',
+        width:        '100%',
+        background:   active ? color.white : 'transparent',
+        border:       'none',
+        borderRadius: radius.lg,
+        cursor:       'pointer',
+        textAlign:    'left',
+        transition:   'all 0.15s ease',
+        marginBottom: '2px',
+        position:     'relative',
+        boxShadow:    active ? '0 1px 4px rgba(15,37,87,0.08)' : 'none',
       }}
     >
-      <Icon
-        size={17}
-        color={active ? color.cream : 'rgba(245,240,232,0.38)'}
+      {active && (
+        <div style={{
+          position:     'absolute',
+          left:         0,
+          top:          '20%',
+          height:       '60%',
+          width:        '3px',
+          background:   color.navy,
+          borderRadius: '0 2px 2px 0',
+        }} />
+      )}
+      <item.Icon
+        size={18}
+        color={active ? color.navy : color.inkSubtle}
+        strokeWidth={active ? 2.5 : 1.8}
       />
       <span style={{
-        fontSize:   fontSize.base,
-        fontWeight: active ? '600' : '400',
-        color:      active ? color.cream : 'rgba(245,240,232,0.42)',
+        fontFamily: font.body,
+        fontSize:   fontSize.sm,
+        fontWeight: active ? '700' : '500',
+        color:      active ? color.navy : color.inkMuted,
+        flex:       1,
       }}>
         {item.label}
       </span>
+      {active && <ChevronRight size={14} color={color.navy} />}
     </button>
   )
 }
 
-function Sidebar({ pathname, navigate, onClose, isMobile }) {
-  const router   = useRouter()
+function SidebarContent({ pathname, navigate, onClose, showClose }) {
   const supabase = createClient()
+  const router   = useRouter()
+  const [info, setInfo] = useState({ churchName: '', adminName: '' })
+
+  useEffect(() => {
+    async function fetchInfo() {
+      try {
+        const res  = await fetch('/api/admin/me')
+        const data = await res.json()
+        if (res.ok) {
+          setInfo({
+            churchName: data.churchName || '',
+            adminName:  data.adminName  || '',
+          })
+        }
+      } catch {}
+    }
+    fetchInfo()
+  }, [])
 
   async function handleLogout() {
     await supabase.auth.signOut()
@@ -79,137 +115,164 @@ function Sidebar({ pathname, navigate, onClose, isMobile }) {
     router.refresh()
   }
 
-  return (
-    <div style={{
-      width:          '224px',
-      background:     color.navy,
-      display:        'flex',
-      flexDirection:  'column',
-      height:         '100%',
-      flexShrink:     0,
-    }}>
+  const initials = (info.adminName || 'A')
+    .split(' ')
+    .map(n => n[0])
+    .join('')
+    .slice(0, 2)
+    .toUpperCase()
 
-      {/* Logo row */}
+  return (
+    <aside style={{
+      width:         '240px',
+      background:    color.cream,
+      borderRight:   `1px solid ${color.creamBorder}`,
+      display:       'flex',
+      flexDirection: 'column',
+      height:        '100%',
+      flexShrink:    0,
+    }}>
+      {/* Logo + church name */}
       <div style={{
-        padding:      '24px 16px 20px',
-        borderBottom: '1px solid rgba(245,240,232,0.08)',
-        display:      'flex',
-        alignItems:   'center',
+        padding:        '24px 20px 20px',
+        borderBottom:   `1px solid ${color.creamBorder}`,
+        display:        'flex',
+        alignItems:     'center',
         justifyContent: 'space-between',
       }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          <BibleLogo size={28} />
-          <div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', minWidth: 0 }}>
+          <BibleLogo size={36} />
+          <div style={{ minWidth: 0 }}>
             <p style={{
-              fontFamily: font.display,
-              fontSize:   fontSize.sm,
-              fontWeight: '700',
-              color:      color.cream,
-              margin:     0,
-              lineHeight: 1.2,
+              fontFamily:   font.heading,
+              fontSize:     '13px',
+              fontWeight:   '800',
+              color:        color.ink,
+              margin:       '0 0 1px',
+              letterSpacing:'-0.01em',
+              overflow:     'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace:   'nowrap',
+              maxWidth:     '140px',
             }}>
-              Sunday School
+              {info.churchName || 'Sunday School'}
             </p>
-            <p style={{ fontSize: fontSize.xs, color: 'rgba(245,240,232,0.4)', margin: 0 }}>
+            <p style={{ fontSize: fontSize['2xs'], color: color.inkSubtle, margin: 0, fontWeight: '500' }}>
               Admin Dashboard
             </p>
           </div>
         </div>
-
-        {/* Close button — mobile drawer only */}
-        {isMobile && (
+        {showClose && (
           <button
             onClick={onClose}
-            style={{
-              background:    'none',
-              border:        'none',
-              cursor:        'pointer',
-              padding:       '4px',
-              display:       'flex',
-              alignItems:    'center',
-            }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', flexShrink: 0 }}
           >
-            <X size={18} color="rgba(245,240,232,0.6)" />
+            <X size={20} color={color.inkMuted} />
           </button>
         )}
       </div>
 
-      {/* Nav items */}
-      <div style={{ flex: 1, padding: '14px 8px', overflowY: 'auto' }}>
+      {/* Nav */}
+      <nav style={{ flex: 1, padding: '14px 12px', overflowY: 'auto' }}>
         {NAV.map(item => (
           <NavItem
             key={item.href}
             item={item}
-            active={
-              pathname === item.href ||
-              pathname.startsWith(item.href + '/')
-            }
+            active={pathname === item.href || pathname.startsWith(item.href + '/')}
             onClick={() => navigate(item.href)}
           />
         ))}
-      </div>
+      </nav>
 
-      {/* Bottom: admin info + logout */}
-      <div style={{
-        padding:      '16px',
-        borderTop:    '1px solid rgba(245,240,232,0.08)',
-        display:      'flex',
-        alignItems:   'center',
-        gap:          '10px',
-      }}>
-        {/* Avatar */}
+      {/* Admin profile + logout */}
+      <div style={{ padding: '16px 12px', borderTop: `1px solid ${color.creamBorder}` }}>
         <div style={{
-          width:           '36px',
-          height:          '36px',
-          borderRadius:    '50%',
-          background:      color.navyMid,
-          flexShrink:      0,
-          display:         'flex',
-          alignItems:      'center',
-          justifyContent:  'center',
+          display:      'flex',
+          alignItems:   'center',
+          gap:          '10px',
+          padding:      '10px 12px',
+          background:   color.white,
+          borderRadius: radius.lg,
+          marginBottom: '8px',
+          border:       `1px solid ${color.creamBorder}`,
         }}>
-          <span style={{ fontSize: fontSize.xs, fontWeight: '700', color: color.cream }}>
-            AD
-          </span>
-        </div>
-
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: fontSize.sm, fontWeight: '600', color: color.cream, margin: 0 }}>
-            Admin
-          </p>
-          <p style={{ fontSize: fontSize.xs, color: 'rgba(245,240,232,0.4)', margin: 0 }}>
-            Signed in
-          </p>
-        </div>
-
-        {/* Logout button */}
-        <button
-          onClick={handleLogout}
-          title="Sign out"
-          style={{
-            background:     'none',
-            border:         'none',
-            cursor:         'pointer',
-            padding:        '8px',
-            borderRadius:   '8px',
+          <div style={{
+            width:          '34px',
+            height:         '34px',
+            borderRadius:   '50%',
+            flexShrink:     0,
+            background:     `linear-gradient(135deg, ${color.navy}, ${color.navyLight})`,
             display:        'flex',
             alignItems:     'center',
-            transition:     'background 0.15s',
+            justifyContent: 'center',
+          }}>
+            <span style={{ fontSize: '12px', fontWeight: '700', color: color.cream, fontFamily: font.heading }}>
+              {initials}
+            </span>
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <p style={{
+              fontSize:     fontSize.sm,
+              fontWeight:   '700',
+              color:        color.ink,
+              margin:       0,
+              fontFamily:   font.body,
+              overflow:     'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace:   'nowrap',
+            }}>
+              {info.adminName || 'Admin'}
+            </p>
+            <p style={{ fontSize: fontSize['2xs'], color: color.inkSubtle, margin: 0 }}>
+              Administrator
+            </p>
+          </div>
+        </div>
+
+        <button
+          onClick={handleLogout}
+          style={{
+            display:      'flex',
+            alignItems:   'center',
+            gap:          '8px',
+            background:   'none',
+            border:       'none',
+            cursor:       'pointer',
+            width:        '100%',
+            padding:      '8px 12px',
+            borderRadius: radius.md,
+            color:        color.inkMuted,
+            fontSize:     fontSize.sm,
+            fontFamily:   font.body,
+            fontWeight:   '500',
+            transition:   'all 0.15s',
           }}
-          onMouseEnter={e => e.currentTarget.style.background = 'rgba(220,38,38,0.15)'}
-          onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+          onMouseEnter={e => { e.currentTarget.style.background = color.errorBg; e.currentTarget.style.color = color.error }}
+          onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; e.currentTarget.style.color = color.inkMuted }}
         >
-          <LogOut size={16} color="rgba(245,240,232,0.45)" />
+          <LogOut size={15} /> Sign Out
         </button>
       </div>
-    </div>
+    </aside>
   )
 }
 
 export default function AdminLayout({ children }) {
-  const pathname = usePathname()
-  const router   = useRouter()
-  const [drawer, setDrawer] = useState(false)
+  const pathname  = usePathname()
+  const router    = useRouter()
+  const [isDesktop, setIsDesktop] = useState(false)
+  const [drawer,    setDrawer]    = useState(false)
+
+  useEffect(() => {
+    function check() {
+      const desktop = window.innerWidth >= DESKTOP_BP
+      setIsDesktop(desktop)
+      if (desktop) setDrawer(false)
+    }
+    check()
+    window.addEventListener('resize', check)
+    return () => window.removeEventListener('resize', check)
+  }, [])
 
   function navigate(href) {
     router.push(href)
@@ -217,110 +280,85 @@ export default function AdminLayout({ children }) {
   }
 
   return (
-    <div style={{
-      minHeight:  '100vh',
-      display:    'flex',
-      background: color.cream,
-      fontFamily: font.body,
-    }}>
+    <div style={{ minHeight: '100vh', display: 'flex', background: '#F8FAFC', fontFamily: font.body }}>
 
-      {/* ── Desktop sidebar ─────────────────────────────────── */}
-      <div style={{
-        position:   'sticky',
-        top:        0,
-        height:     '100vh',
-        display:    'flex',
-        flexShrink: 0,
-      }}>
-        <Sidebar pathname={pathname} navigate={navigate} />
-      </div>
+      {/* Desktop sidebar */}
+      {isDesktop && (
+        <div style={{ position: 'sticky', top: 0, height: '100vh', flexShrink: 0 }}>
+          <SidebarContent pathname={pathname} navigate={navigate} showClose={false} />
+        </div>
+      )}
 
-      {/* ── Mobile drawer overlay ────────────────────────────── */}
-      {drawer && (
-        <div style={{
-          position: 'fixed',
-          inset:    0,
-          zIndex:   100,
-          display:  'flex',
-        }}>
-          {/* Backdrop */}
+      {/* Mobile drawer */}
+      {!isDesktop && drawer && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 100, display: 'flex' }}>
           <div
-            style={{
-              position:   'absolute',
-              inset:      0,
-              background: 'rgba(10,22,40,0.55)',
-            }}
+            style={{ position: 'absolute', inset: 0, background: 'rgba(10,26,61,0.4)', backdropFilter: 'blur(2px)' }}
             onClick={() => setDrawer(false)}
           />
-          {/* Drawer panel */}
-          <div style={{ position: 'relative', zIndex: 1, height: '100%' }}>
-            <Sidebar
-              pathname={pathname}
-              navigate={navigate}
-              onClose={() => setDrawer(false)}
-              isMobile
-            />
+          <div style={{ position: 'relative', zIndex: 1, height: '100%', animation: 'drawerIn 0.25s ease' }}>
+            <SidebarContent pathname={pathname} navigate={navigate} onClose={() => setDrawer(false)} showClose />
           </div>
         </div>
       )}
 
-      {/* ── Main content area ───────────────────────────────── */}
+      {/* Main */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-
-        {/* Mobile top bar */}
-        <div style={{
-          background:  color.navy,
-          padding:     '14px 20px',
-          display:     'flex',
-          alignItems:  'center',
-          gap:         '14px',
-          position:    'sticky',
-          top:         0,
-          zIndex:      10,
-          boxShadow:   '0 1px 0 rgba(245,240,232,0.08)',
+        {/* Top bar — hamburger mobile only */}
+        <header style={{
+          height:       '56px',
+          background:   color.white,
+          borderBottom: `1px solid ${color.creamBorder}`,
+          padding:      '0 20px',
+          display:      'flex',
+          alignItems:   'center',
+          gap:          '12px',
+          position:     'sticky',
+          top:          0,
+          zIndex:       50,
+          flexShrink:   0,
         }}>
-          <button
-            onClick={() => setDrawer(true)}
-            style={{
-              background:     'rgba(245,240,232,0.1)',
-              border:         'none',
-              borderRadius:   radius.sm,
-              width:          '40px',
-              height:         '40px',
-              display:        'flex',
-              alignItems:     'center',
-              justifyContent: 'center',
-              cursor:         'pointer',
-            }}
-          >
-            <Menu size={19} color={color.cream} />
-          </button>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-            <BibleLogo size={22} />
-            <p style={{
-              fontFamily: font.display,
-              fontSize:   fontSize.base,
-              fontWeight: '700',
-              color:      color.cream,
-              margin:     0,
-            }}>
+          {!isDesktop && (
+            <button
+              onClick={() => setDrawer(true)}
+              aria-label="Open menu"
+              style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px', borderRadius: radius.sm, display: 'flex', flexShrink: 0 }}
+            >
+              <Menu size={22} color={color.ink} />
+            </button>
+          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <BibleLogo size={26} />
+            <span style={{ fontFamily: font.heading, fontSize: fontSize.base, fontWeight: '800', color: color.ink, letterSpacing: '-0.01em' }}>
               Sunday School
-            </p>
+            </span>
           </div>
-        </div>
+          <div style={{ flex: 1 }} />
+          {!isDesktop && (
+            <span style={{ fontSize: fontSize.sm, fontWeight: '600', color: color.inkMuted, fontFamily: font.body }}>
+              {NAV.find(n => pathname === n.href || pathname.startsWith(n.href + '/'))?.label || ''}
+            </span>
+          )}
+        </header>
 
         {/* Page content */}
-        <div style={{
-          flex:      1,
-          padding:   '28px 20px',
-          maxWidth:  '1100px',
-          width:     '100%',
-          alignSelf: 'flex-start',
-        }}>
-          {children}
-        </div>
+        <main style={{ flex: 1, padding: '28px 24px 48px' }}>
+          <div style={{ maxWidth: '1200px', width: '100%', margin: '0 auto' }}>
+            {children}
+          </div>
+        </main>
       </div>
+
+      <style>{`
+        @keyframes drawerIn {
+          from { transform: translateX(-100%); }
+          to   { transform: translateX(0); }
+        }
+        @keyframes fadeIn  { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes scaleIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+        @keyframes slideUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes spin    { to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   )
 }

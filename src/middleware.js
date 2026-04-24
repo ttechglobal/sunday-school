@@ -1,96 +1,87 @@
-import { createServerClient } from '@supabase/ssr'
 import { NextResponse } from 'next/server'
+import { createServerClient } from '@supabase/ssr'
+import { jwtVerify } from 'jose'
+
+function classSecret() {
+  return new TextEncoder().encode(
+    process.env.CLASS_JWT_SECRET || 'sunday-school-secret-change-in-prod'
+  )
+}
+
+// Which paths need which auth
+const ADMIN_PREFIXES  = ['/dashboard', '/approvals', '/admin-records', '/classes', '/members', '/reports', '/settings']
+const CLASS_PREFIXES  = ['/home', '/attendance', '/history', '/followup', '/members-list']
+const PUBLIC_PATHS    = ['/login', '/admin-login', '/register', '/api', '/_next', '/favicon']
 
 export async function middleware(request) {
-  let supabaseResponse = NextResponse.next({ request })
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            request.cookies.set(name, value)
-          })
-          supabaseResponse = NextResponse.next({ request })
-          cookiesToSet.forEach(({ name, value, options }) => {
-            supabaseResponse.cookies.set(name, value, options)
-          })
-        },
-      },
-    }
-  )
-
-  // Refresh session — required for Server Components to stay in sync
-  const { data: { user } } = await supabase.auth.getUser()
-
   const { pathname } = request.nextUrl
 
-  // ── Admin route protection ────────────────────────────────
-  const adminRoutes = [
-    '/dashboard', '/sessions', '/classes',
-    '/members', '/reports', '/settings',
-  ]
-  const isAdminRoute = adminRoutes.some(r =>
-    pathname === r || pathname.startsWith(r + '/')
-  )
-
-  if (isAdminRoute && !user) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/admin-login'
-    return NextResponse.redirect(url)
+  // Always allow public paths
+  if (PUBLIC_PATHS.some(p => pathname.startsWith(p)) || pathname === '/') {
+    return NextResponse.next()
   }
 
-  // ── Class route protection ────────────────────────────────
-  const classRoutes = [
-    '/home', '/attendance', '/offering', '/history',
-    '/followup', '/members-list', '/visitors', '/teacher',
-  ]
-  const isClassRoute = classRoutes.some(r =>
-    pathname === r || pathname.startsWith(r + '/')
-  )
+  // ── Class-side routes ──────────────────────────────────────
+  if (CLASS_PREFIXES.some(p => pathname.startsWith(p))) {
+    const token = request.cookies.get('class_token')?.value
 
-  if (isClassRoute) {
-    const classToken = request.cookies.get('class_token')?.value
-    if (!classToken) {
-      const url = request.nextUrl.clone()
-      url.pathname = '/login'
-      return NextResponse.redirect(url)
+    if (!token) {
+      console.log('[middleware] class route no token, redirect login:', pathname)
+      return NextResponse.redirect(new URL('/login', request.url))
     }
 
-    // Verify class JWT
     try {
-      const { jwtVerify } = await import('jose')
-      const secret = new TextEncoder().encode(
-        process.env.JWT_SECRET || 'fallback-secret'
-      )
-      await jwtVerify(classToken, secret)
-    } catch {
-      const url = request.nextUrl.clone()
-      url.pathname = '/login'
-      const response = NextResponse.redirect(url)
-      response.cookies.delete('class_token')
-      return response
+      const { payload } = await jwtVerify(token, classSecret())
+      if (!payload?.classId || !payload?.churchId) {
+        throw new Error('missing ids')
+      }
+      // Valid — pass through
+      return NextResponse.next()
+    } catch (err) {
+      console.log('[middleware] bad class token:', err.message)
+      const res = NextResponse.redirect(new URL('/login', request.url))
+      res.cookies.set('class_token', '', { maxAge: 0, path: '/' })
+      return res
     }
   }
 
-  // ── Redirect logged-in admins away from auth pages ────────
-  const authPages = ['/admin-login', '/register']
-  if (user && authPages.includes(pathname)) {
-    const url = request.nextUrl.clone()
-    url.pathname = '/dashboard'
-    return NextResponse.redirect(url)
+  // ── Admin routes ───────────────────────────────────────────
+  if (ADMIN_PREFIXES.some(p => pathname.startsWith(p))) {
+    let response = NextResponse.next()
+
+    const supabase = createServerClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
+      {
+        cookies: {
+          getAll() {
+            return request.cookies.getAll()
+          },
+          setAll(cookieList) {
+            cookieList.forEach(({ name, value, options }) => {
+              request.cookies.set(name, value)
+              response.cookies.set(name, value, options)
+            })
+          },
+        },
+      }
+    )
+
+    const { data: { user } } = await supabase.auth.getUser()
+
+    if (!user) {
+      console.log('[middleware] admin route no user, redirect:', pathname)
+      return NextResponse.redirect(new URL('/admin-login', request.url))
+    }
+
+    return response
   }
 
-  return supabaseResponse
+  return NextResponse.next()
 }
 
 export const config = {
   matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|api).*)',
+    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
   ],
 }

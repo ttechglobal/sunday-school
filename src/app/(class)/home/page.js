@@ -1,362 +1,492 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { BookOpen, ChevronRight, Clock, Check } from 'lucide-react'
+import {
+  CalendarDays, Users, Clock,
+  DollarSign, ChevronRight, UserCheck,
+  CalendarCheck,
+} from 'lucide-react'
 import ClassShell from '@/components/class/ClassShell'
+import { SkeletonList } from '@/components/class/ui/SkeletonCard'
+import StatusBadge from '@/components/class/ui/StatusBadge'
 import { color, font, fontSize, radius, shadow } from '@/styles/tokens'
 
-// ── Mock data ─────────────────────────────────────────────────
-const MOCK = {
-  className:   'Youth A',
-  church:      'Covenant Chapel · Lagos',
-  isOpen:      true,
-  closesAt:    '11:59 PM',
-  date:        'Sunday, 15 June 2025',
-  attendanceDone: true,
-  summary: {
-    present:     18,
-    total:       24,
-    onTime:      12,
-    bible:       15,
-    memoryVerse: 10,
-    offering:    14500,
-  },
-  absentMembers: [
-    { id: 'a1', name: 'Ngozi Okafor' },
-    { id: 'a2', name: 'Amara Okonkwo' },
-    { id: 'a3', name: 'Chidi Eze' },
-    { id: 'a4', name: 'Kelechi Onu' },
-    { id: 'a5', name: 'Tochi Ibe' },
-    { id: 'a6', name: 'Blessing Uche' },
-  ],
+function formatNaira(v) {
+  if (!v) return '₦0'
+  if (v >= 1000000) return `₦${(v / 1000000).toFixed(1)}M`
+  if (v >= 1000)    return `₦${(v / 1000).toFixed(0)}k`
+  return `₦${Number(v).toLocaleString('en-NG')}`
 }
 
-// ── Session badge (in topbar) ─────────────────────────────────
-function SessionBadge({ isOpen }) {
-  return (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: '6px',
-      background: isOpen ? 'rgba(22,163,74,0.18)' : 'rgba(217,119,6,0.18)',
-      borderRadius: radius.full, padding: '5px 12px',
-    }}>
-      <div style={{
-        width: '7px', height: '7px', borderRadius: '50%',
-        background: isOpen ? color.success : color.warning,
-        boxShadow: isOpen ? '0 0 0 2px rgba(22,163,74,0.3)' : 'none',
-      }} />
-      <span style={{ fontSize: fontSize.xs, fontWeight: '700', color: isOpen ? '#86EFAC' : '#FDE68A' }}>
-        {isOpen ? 'Open' : 'Closed'}
-      </span>
-    </div>
-  )
+function getGreeting() {
+  const h = new Date().getHours()
+  if (h < 12) return 'Good morning'
+  if (h < 17) return 'Good afternoon'
+  return 'Good evening'
 }
 
-// ── Summary card ──────────────────────────────────────────────
-function SummaryCard({ date, summary }) {
-  const { present, total, onTime, bible, memoryVerse, offering } = summary
-  const pct = Math.round((present / total) * 100)
-  const rateColor = pct >= 75 ? color.success : pct >= 50 ? color.warning : color.error
-
-  const rows = [
-    { icon: '👥', label: 'Present',      value: `${present} / ${total}`, color: rateColor },
-    { icon: '⏰', label: 'On Time',      value: onTime,                  color: color.navy },
-    { icon: '📖', label: 'Bible',        value: bible,                   color: color.navyLite },
-    { icon: '✝️', label: 'Memory Verse', value: memoryVerse,             color: '#7C3AED' },
-    { icon: '💰', label: 'Total Offering',value: `₦${offering.toLocaleString('en-NG')}`, color: color.goldDark },
-  ]
-
+// ── Session banner ────────────────────────────────────────────
+function SessionBanner({ isOpen }) {
   return (
     <div style={{
-      background: color.white,
-      borderRadius: radius.lg,
-      boxShadow: shadow.card,
-      overflow: 'hidden',
+      borderRadius: radius.xl,
+      padding:      '20px 22px',
+      display:      'flex',
+      alignItems:   'center',
+      gap:          '16px',
+      background:   isOpen
+        ? `linear-gradient(135deg, ${color.success}, #047857)`
+        : color.creamDark,
+      border:       isOpen ? 'none' : `1px solid ${color.creamBorder}`,
+      boxShadow:    isOpen ? '0 4px 16px rgba(5,150,105,0.2)' : 'none',
     }}>
-      {/* Card header */}
       <div style={{
-        background: color.navy,
-        padding: '16px 20px',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
+        width:          '44px',
+        height:         '44px',
+        borderRadius:   '50%',
+        background:     isOpen ? 'rgba(255,255,255,0.2)' : color.creamBorder,
+        display:        'flex',
+        alignItems:     'center',
+        justifyContent: 'center',
+        flexShrink:     0,
       }}>
-        <div>
-          <p style={{ fontSize: fontSize.xs, fontWeight: '700', color: 'rgba(245,240,232,0.5)', letterSpacing: '0.07em', margin: '0 0 2px', textTransform: 'uppercase' }}>
-            Sunday Summary
-          </p>
-          <p style={{ fontFamily: font.display, fontSize: fontSize.md, fontWeight: '700', color: color.cream, margin: 0 }}>
-            {date}
-          </p>
-        </div>
         <div style={{
-          background: `${rateColor}22`,
-          borderRadius: radius.full,
-          padding: '6px 14px',
-          border: `1px solid ${rateColor}44`,
-        }}>
-          <span style={{ fontSize: fontSize.sm, fontWeight: '700', color: rateColor }}>
-            {pct}%
-          </span>
-        </div>
+          width:        '12px',
+          height:       '12px',
+          borderRadius: '50%',
+          background:   isOpen ? 'white' : color.inkSubtle,
+          animation:    isOpen ? 'pulseDot 2s ease infinite' : 'none',
+        }} />
       </div>
-
-      {/* Stats rows */}
-      <div style={{ padding: '4px 0' }}>
-        {rows.map((row, i) => (
-          <div key={row.label} style={{
-            display: 'flex',
-            alignItems: 'center',
-            padding: '13px 20px',
-            borderBottom: i < rows.length - 1 ? `1px solid ${color.creamDark}` : 'none',
-            gap: '12px',
-          }}>
-            <span style={{ fontSize: '18px', lineHeight: 1, width: '24px', textAlign: 'center' }}>
-              {row.icon}
-            </span>
-            <span style={{ flex: 1, fontSize: fontSize.base, color: color.mist }}>
-              {row.label}
-            </span>
-            <span style={{ fontSize: fontSize.md, fontWeight: '700', color: row.color }}>
-              {row.value}
-            </span>
-          </div>
-        ))}
+      <div>
+        <p style={{ fontFamily: font.heading, fontSize: fontSize.md, fontWeight: '700', color: isOpen ? 'white' : color.ink, margin: 0 }}>
+          {isOpen ? 'Session is Open' : 'No Active Session'}
+        </p>
+        <p style={{ fontSize: fontSize.sm, color: isOpen ? 'rgba(255,255,255,0.8)' : color.inkMuted, margin: '3px 0 0', fontFamily: font.body }}>
+          {isOpen ? 'Attendance can be submitted now' : 'Waiting for admin to open a session'}
+        </p>
       </div>
     </div>
   )
 }
 
-// ── Absent members + follow-up ────────────────────────────────
-function AbsentFollowUp({ members }) {
-  const [reached, setReached] = useState({})
+// ── Stat card ─────────────────────────────────────────────────
+function StatCard({ icon, label, value }) {
+  return (
+    <div style={{
+      flex:          1,
+      background:    color.white,
+      borderRadius:  radius.xl,
+      padding:       '18px 16px',
+      boxShadow:     shadow.card,
+      border:        '1px solid rgba(15,37,87,0.05)',
+      display:       'flex',
+      flexDirection: 'column',
+      gap:           '10px',
+    }}>
+      <div style={{
+        width:          '38px',
+        height:         '38px',
+        borderRadius:   radius.md,
+        background:     'rgba(15,37,87,0.06)',
+        display:        'flex',
+        alignItems:     'center',
+        justifyContent: 'center',
+        color:          color.navy,
+      }}>
+        {icon}
+      </div>
+      <p style={{ fontFamily: font.heading, fontSize: fontSize.xl, fontWeight: '800', color: color.navy, margin: 0, lineHeight: 1, letterSpacing: '-0.02em' }}>
+        {value}
+      </p>
+      <p style={{ fontSize: fontSize['2xs'], fontWeight: '700', color: color.inkSubtle, margin: 0, textTransform: 'uppercase', letterSpacing: '0.04em', fontFamily: font.body }}>
+        {label}
+      </p>
+    </div>
+  )
+}
 
-  function toggle(id) {
-    setReached(p => ({ ...p, [id]: !p[id] }))
-  }
-
-  const reachedCount = Object.values(reached).filter(Boolean).length
+// ── Session row ───────────────────────────────────────────────
+function SessionRow({ session, onClick }) {
+  const isApproved = session.status === 'approved'
+  const isPending  = session.status === 'pending'
+  const isRejected = session.status === 'rejected'
 
   return (
     <div style={{
-      background: color.white,
-      borderRadius: radius.lg,
-      boxShadow: shadow.card,
-      overflow: 'hidden',
+      background:   color.white,
+      borderRadius: radius.xl,
+      border:       `1px solid ${isApproved ? color.successBorder : isRejected ? color.errorBorder : color.creamBorder}`,
+      boxShadow:    shadow.card,
+      overflow:     'hidden',
     }}>
-      {/* Header */}
-      <div style={{
-        padding: '16px 20px',
-        borderBottom: `1px solid ${color.creamDark}`,
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-      }}>
-        <div>
-          <p style={{ fontFamily: font.display, fontSize: fontSize.md, fontWeight: '700', color: color.navy, margin: '0 0 2px' }}>
-            Absent This Sunday
+      {/* Main row */}
+      <button
+        onClick={onClick}
+        style={{
+          display:      'flex',
+          alignItems:   'center',
+          gap:          '14px',
+          padding:      '16px 18px',
+          background:   'transparent',
+          border:       'none',
+          cursor:       'pointer',
+          width:        '100%',
+          textAlign:    'left',
+        }}
+      >
+        <div style={{
+          width:          '46px',
+          height:         '46px',
+          borderRadius:   radius.md,
+          background:     'rgba(15,37,87,0.06)',
+          display:        'flex',
+          alignItems:     'center',
+          justifyContent: 'center',
+          flexShrink:     0,
+          color:          color.navy,
+        }}>
+          <CalendarDays size={20} />
+        </div>
+
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <p style={{ fontFamily: font.heading, fontSize: fontSize.base, fontWeight: '700', color: color.ink, margin: '0 0 4px' }}>
+            {session.date}
           </p>
-          <p style={{ fontSize: fontSize.sm, color: color.mist, margin: 0 }}>
-            {members.length} members · {reachedCount} reached
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span style={{ fontSize: fontSize.xs, color: color.inkMuted, fontWeight: '500', fontFamily: font.body }}>
+              {session.present}/{session.total} present
+            </span>
+            {session.offering > 0 && (
+              <>
+                <span style={{ fontSize: fontSize.xs, color: color.inkSubtle }}>·</span>
+                <span style={{ fontSize: fontSize.xs, color: color.goldDark, fontWeight: '700', fontFamily: font.body }}>
+                  {formatNaira(session.offering)}
+                </span>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexShrink: 0 }}>
+          <StatusBadge status={session.status} />
+          <ChevronRight size={16} color={color.inkSubtle} />
+        </div>
+      </button>
+
+      {/* Approved summary row */}
+      {isApproved && (
+        <div style={{
+          padding:     '0 18px 14px',
+          display:     'flex',
+          gap:         '8px',
+          flexWrap:    'wrap',
+          alignItems:  'center',
+        }}>
+          {[
+            { label: `${session.present} present`,                      c: color.success  },
+            { label: `${(session.total || 0) - (session.present || 0)} absent`, c: color.error    },
+            { label: formatNaira(session.offering),                     c: color.goldDark },
+          ].map(p => (
+            <span key={p.label} style={{
+              fontSize:     fontSize.xs,
+              fontWeight:   '700',
+              color:        p.c,
+              background:   `${p.c}12`,
+              padding:      '3px 10px',
+              borderRadius: radius.full,
+              fontFamily:   font.body,
+            }}>
+              {p.label}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {/* Pending locked message */}
+      {isPending && (
+        <div style={{
+          display:    'flex',
+          alignItems: 'center',
+          gap:        '8px',
+          padding:    '0 18px 14px',
+        }}>
+          <Clock size={12} color={color.warning} />
+          <p style={{ fontSize: fontSize.xs, color: '#92400E', margin: 0, fontFamily: font.body, fontWeight: '500' }}>
+            Submitted — awaiting admin approval
           </p>
         </div>
-        {reachedCount > 0 && (
-          <div style={{
-            background: color.successBg,
-            borderRadius: radius.full,
-            padding: '4px 12px',
-            border: `1px solid ${color.successBorder}`,
-          }}>
-            <span style={{ fontSize: fontSize.xs, fontWeight: '700', color: color.success }}>
-              {reachedCount}/{members.length} ✓
-            </span>
-          </div>
-        )}
-      </div>
+      )}
 
-      {/* Members list */}
-      <div>
-        {members.map((m, i) => {
-          const isReached = !!reached[m.id]
-          return (
-            <button
-              key={m.id}
-              onClick={() => toggle(m.id)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: '14px',
-                padding: '14px 20px',
-                width: '100%',
-                background: isReached ? color.successBg : 'transparent',
-                border: 'none',
-                borderBottom: i < members.length - 1 ? `1px solid ${color.creamDark}` : 'none',
-                cursor: 'pointer',
-                textAlign: 'left',
-                transition: 'background 0.2s ease',
-              }}
-            >
-              {/* Avatar */}
-              <div style={{
-                width: '38px', height: '38px', borderRadius: '50%',
-                background: isReached ? color.successBg : color.creamDark,
-                border: `2px solid ${isReached ? color.success : color.creamDark}`,
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0, transition: 'all 0.2s ease',
-              }}>
-                <span style={{ fontSize: fontSize.xs, fontWeight: '700', color: isReached ? color.success : color.mist }}>
-                  {m.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                </span>
-              </div>
-
-              {/* Name */}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{
-                  fontSize: fontSize.base,
-                  fontWeight: '600',
-                  color: isReached ? color.success : color.navy,
-                  margin: 0,
-                  textDecoration: isReached ? 'none' : 'none',
-                  transition: 'color 0.2s ease',
-                }}>
-                  {m.name}
-                </p>
-                <p style={{ fontSize: fontSize.sm, color: color.mist, margin: '2px 0 0' }}>
-                  {isReached ? 'Reached out ✓' : 'Tap to mark as reached'}
-                </p>
-              </div>
-
-              {/* Checkbox */}
-              <div style={{
-                width: '28px', height: '28px', borderRadius: '8px',
-                border: `2px solid ${isReached ? color.success : color.creamDark}`,
-                background: isReached ? color.success : 'transparent',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                flexShrink: 0, transition: 'all 0.2s ease',
-              }}>
-                {isReached && <Check size={15} color="#fff" strokeWidth={3} />}
-              </div>
-            </button>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-// ── Main Page ─────────────────────────────────────────────────
-export default function ClassHomePage() {
-  const router = useRouter()
-  const { className, church, isOpen, closesAt, date, attendanceDone, summary, absentMembers } = MOCK
-
-  return (
-    <ClassShell
-      className={className}
-      churchName={church}
-      rightElement={<SessionBadge isOpen={isOpen} />}
-    >
-      <div style={{
-        flex: 1,
-        padding: '20px 16px 40px',
-        width: '100%',
-        maxWidth: '560px',
-        margin: '0 auto',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '16px',
-      }}>
-
-        {/* Session status banner */}
-        {isOpen ? (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '12px',
-            background: color.successBg,
-            border: `1px solid ${color.successBorder}`,
-            borderRadius: radius.md, padding: '14px 18px',
-          }}>
-            <div style={{ width: '10px', height: '10px', borderRadius: '50%', background: color.success, flexShrink: 0, boxShadow: `0 0 0 3px rgba(22,163,74,0.2)` }} />
-            <div>
-              <p style={{ fontSize: fontSize.base, fontWeight: '700', color: '#15803D', margin: 0 }}>Session is Open</p>
-              <p style={{ fontSize: fontSize.sm, color: '#166534', margin: '2px 0 0' }}>Closes at {closesAt}</p>
-            </div>
-          </div>
-        ) : (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '12px',
-            background: color.warningBg, border: `1px solid #FDE68A`,
-            borderRadius: radius.md, padding: '14px 18px',
-          }}>
-            <Clock size={18} color={color.warning} style={{ flexShrink: 0 }} />
-            <div>
-              <p style={{ fontSize: fontSize.base, fontWeight: '700', color: '#92400E', margin: 0 }}>Session Closed</p>
-              <p style={{ fontSize: fontSize.sm, color: '#92400E', margin: '2px 0 0' }}>Opens next Sunday at 6:00 AM</p>
-            </div>
-          </div>
-        )}
-
-        {/* Take Attendance button */}
+      {/* Absentee callout for approved records */}
+      {isApproved && session.absentCount > 0 && (
         <button
-          onClick={() => router.push('/attendance')}
-          disabled={!isOpen}
+          onClick={() => onClick('followup')}
           style={{
-            display: 'flex', alignItems: 'center', gap: '16px',
-            background: isOpen ? color.navy : color.creamDark,
-            borderRadius: radius.lg, padding: '20px',
-            border: 'none', cursor: isOpen ? 'pointer' : 'not-allowed',
-            opacity: isOpen ? 1 : 0.6,
-            width: '100%', textAlign: 'left',
-            boxShadow: isOpen ? shadow.hover : 'none',
-            transition: 'all 0.15s ease',
+            display:      'flex',
+            alignItems:   'center',
+            gap:          '8px',
+            margin:       '0 18px 14px',
+            padding:      '10px 14px',
+            background:   '#FFFBEB',
+            border:       '1px solid #FCD34D',
+            borderRadius: radius.lg,
+            cursor:       'pointer',
+            width:        'calc(100% - 36px)',
+            textAlign:    'left',
           }}
         >
-          <div style={{
-            width: '52px', height: '52px', borderRadius: '14px',
-            background: 'rgba(245,240,232,0.12)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-          }}>
-            <BookOpen size={26} color={color.cream} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <p style={{ fontFamily: font.display, fontSize: fontSize.md, fontWeight: '700', color: color.cream, margin: '0 0 3px' }}>
-              {attendanceDone ? 'Edit Attendance' : 'Take Attendance'}
-            </p>
-            <p style={{ fontSize: fontSize.sm, color: 'rgba(245,240,232,0.55)', margin: 0 }}>
-              {attendanceDone ? 'Already submitted today' : 'Mark present, offering & more'}
-            </p>
-          </div>
-          {attendanceDone && (
-            <div style={{ background: color.success, borderRadius: radius.full, padding: '4px 12px' }}>
-              <span style={{ fontSize: fontSize.xs, fontWeight: '700', color: '#fff' }}>✓ Done</span>
+          <UserCheck size={14} color={color.warning} style={{ flexShrink: 0 }} />
+          <p style={{ fontSize: fontSize.xs, fontWeight: '600', color: '#92400E', margin: 0, fontFamily: font.body, flex: 1 }}>
+            {session.absentCount} member{session.absentCount > 1 ? 's' : ''} were absent
+          </p>
+          <span style={{ fontSize: fontSize.xs, fontWeight: '700', color: color.warning, fontFamily: font.body, whiteSpace: 'nowrap' }}>
+            View Absentees →
+          </span>
+        </button>
+      )}
+    </div>
+  )
+}
+
+// ── Main page ─────────────────────────────────────────────────
+export default function ClassHomePage() {
+  const router = useRouter()
+
+  const [classInfo,      setClassInfo]      = useState(null)
+  const [sessionData,    setSessionData]    = useState(null)
+  const [lastSession,    setLastSession]    = useState(null)
+  const [recentSessions, setRecentSessions] = useState([])
+  const [absentees,      setAbsentees]      = useState([])
+  const [loading,        setLoading]        = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function load() {
+      try {
+        const [meRes, sessRes] = await Promise.all([
+          fetch('/api/class/me'),
+          fetch('/api/class/session'),
+        ])
+        const [me, sess] = await Promise.all([meRes.json(), sessRes.json()])
+        if (cancelled) return
+        setClassInfo(me)
+        setSessionData(sess)
+
+        const histRes  = await fetch('/api/class/history')
+        const histData = await histRes.json()
+        if (cancelled) return
+
+        if (histRes.ok && histData.sessions?.length > 0) {
+          setLastSession(histData.sessions[0])
+          setRecentSessions(histData.sessions.slice(0, 5))
+          setAbsentees(histData.sessions[0]?.absentees || [])
+        } else {
+          setLastSession(null)
+          setRecentSessions([])
+          setAbsentees([])
+        }
+      } catch (err) {
+        console.error('Home load error:', err)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    load()
+    window.addEventListener('focus', load)
+    return () => { cancelled = true; window.removeEventListener('focus', load) }
+  }, [])
+
+  const className = classInfo?.className || 'My Class'
+
+  return (
+    <ClassShell className={classInfo?.className} churchName={classInfo?.churchName}>
+      <div style={{ maxWidth: '560px', margin: '0 auto' }}>
+
+        {/* Hero */}
+        <div style={{
+          background: `linear-gradient(160deg, ${color.navyDark} 0%, ${color.navy} 60%, ${color.navyLight} 100%)`,
+          padding:    '32px 24px 48px',
+        }}>
+          <p style={{ fontSize: fontSize.sm, fontWeight: '500', color: 'rgba(250,246,240,0.55)', margin: '0 0 6px', letterSpacing: '0.04em', fontFamily: font.body }}>
+            {getGreeting()}
+          </p>
+          <h1 style={{ fontFamily: font.heading, fontSize: fontSize['2xl'], fontWeight: '800', color: color.cream, margin: '0 0 6px', letterSpacing: '-0.02em' }}>
+            {className}
+          </h1>
+          <p style={{ fontSize: fontSize.sm, color: 'rgba(250,246,240,0.5)', margin: 0, fontFamily: font.body }}>
+            {new Intl.DateTimeFormat('en-NG', { weekday: 'long', month: 'long', day: 'numeric' }).format(new Date())}
+          </p>
+        </div>
+
+        {/* Content — lifted into hero */}
+        <div style={{ padding: '0 16px 100px', marginTop: '-28px' }}>
+          {loading ? (
+            <div style={{ marginTop: '28px' }}>
+              <SkeletonList count={3} height={90} gap={16} />
+            </div>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+
+              <SessionBanner isOpen={sessionData?.isOpen} />
+
+              {/* CTA */}
+              <button
+                onClick={() => router.push('/attendance')}
+                style={{
+                  display:        'flex',
+                  alignItems:     'center',
+                  justifyContent: 'space-between',
+                  padding:        '22px 24px',
+                  background:     `linear-gradient(135deg, ${color.navy}, ${color.navyLight})`,
+                  borderRadius:   radius.xl,
+                  border:         'none',
+                  cursor:         'pointer',
+                  boxShadow:      shadow['btn-lg'],
+                  transition:     'transform 0.15s ease',
+                  width:          '100%',
+                }}
+                onMouseDown={e => { e.currentTarget.style.transform = 'scale(0.98)' }}
+                onMouseUp={e =>   { e.currentTarget.style.transform = 'scale(1)' }}
+              >
+                <div style={{ textAlign: 'left' }}>
+                  <p style={{ fontFamily: font.heading, fontSize: fontSize.md, fontWeight: '700', color: color.cream, margin: '0 0 4px' }}>
+                    Mark Today's Attendance
+                  </p>
+                  <p style={{ fontSize: fontSize.sm, color: 'rgba(250,246,240,0.65)', margin: 0, fontFamily: font.body }}>
+                    {sessionData?.isOpen ? 'Tap to start marking members' : 'Session closed — contact admin'}
+                  </p>
+                </div>
+                <div style={{ width: '46px', height: '46px', borderRadius: '50%', background: 'rgba(250,246,240,0.15)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <ChevronRight size={24} color={color.cream} />
+                </div>
+              </button>
+
+              {/* Last Sunday stats — only approved */}
+              {lastSession && lastSession.status === 'approved' && (
+                <div>
+                  <p style={sLabel}>Last Sunday</p>
+                  <div style={{ display: 'flex', gap: '10px' }}>
+                    <StatCard icon={<Users size={18} />}     label="Present"  value={`${lastSession.present}/${lastSession.total}`} />
+                    <StatCard icon={<Clock size={18} />}      label="On Time"  value={lastSession.onTime ?? '—'} />
+                    <StatCard icon={<DollarSign size={18} />} label="Offering" value={formatNaira(lastSession.offering)} />
+                  </div>
+                </div>
+              )}
+
+              {/* Absentee follow-up nudge */}
+{absentees.length > 0 && lastSession && (
+  (() => {
+    const uncontacted = absentees.filter(a => !a.contacted)
+    if (uncontacted.length === 0) return null
+    return (
+      <button
+        onClick={() => router.push('/followup')}
+        style={{
+          display:      'flex',
+          alignItems:   'center',
+          gap:          '14px',
+          padding:      '16px 18px',
+          background:   '#FFFBEB',
+          border:       '1px solid #FCD34D',
+          borderRadius: radius.xl,
+          cursor:       'pointer',
+          width:        '100%',
+          textAlign:    'left',
+          transition:   'all 0.15s',
+        }}
+      >
+        <div style={{
+          width:          '42px',
+          height:         '42px',
+          borderRadius:   radius.md,
+          background:     '#FEF3C7',
+          display:        'flex',
+          alignItems:     'center',
+          justifyContent: 'center',
+          flexShrink:     0,
+          color:          color.warning,
+        }}>
+          <Users size={20} />
+        </div>
+        <div style={{ flex: 1 }}>
+          <p style={{ fontFamily: font.heading, fontSize: fontSize.sm, fontWeight: '700', color: '#92400E', margin: '0 0 1px' }}>
+            {uncontacted.length} member{uncontacted.length > 1 ? 's' : ''} haven't been followed up
+          </p>
+          <p style={{ fontSize: fontSize.xs, color: '#B45309', margin: 0, fontFamily: font.body }}>
+            Tap to view absentees and mark as contacted
+          </p>
+        </div>
+        <ChevronRight size={16} color="#B45309" />
+      </button>
+    )
+  })()
+)}
+              {/* Recent sessions */}
+              {recentSessions.length > 0 && (
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                    <p style={{ ...sLabel, margin: 0 }}>Recent Sundays</p>
+                    <button
+                      onClick={() => router.push('/history')}
+                      style={{ display: 'flex', alignItems: 'center', gap: '2px', background: 'none', border: 'none', cursor: 'pointer', fontSize: fontSize.xs, fontWeight: '700', color: color.navy, fontFamily: font.body, padding: '4px 0' }}
+                    >
+                      View all <ChevronRight size={13} />
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {recentSessions.map((s, i) => (
+                      <SessionRow
+                        key={s.id || i}
+                        session={s}
+                        onClick={(target) => {
+                          if (target === 'followup') router.push('/followup')
+                          else router.push('/history')
+                        }}
+                      />
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Empty state */}
+              {!lastSession && (
+                <div style={{ textAlign: 'center', padding: '48px 24px', background: color.white, borderRadius: radius.xl, boxShadow: shadow.card, border: '1px solid rgba(15,37,87,0.05)' }}>
+                  <div style={{ width: '64px', height: '64px', borderRadius: '50%', background: 'rgba(15,37,87,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 18px', color: color.navy }}>
+                    <CalendarCheck size={30} />
+                  </div>
+                  <h3 style={{ fontFamily: font.heading, fontSize: fontSize.md, fontWeight: '700', color: color.ink, margin: '0 0 8px' }}>
+                    No records yet
+                  </h3>
+                  <p style={{ fontSize: fontSize.sm, color: color.inkMuted, margin: 0, fontFamily: font.body, lineHeight: 1.7 }}>
+                    Submit your first attendance to see a summary here.
+                  </p>
+                </div>
+              )}
             </div>
           )}
-        </button>
-
-        {/* Sunday Summary Card */}
-        {attendanceDone && <SummaryCard date={date} summary={summary} />}
-
-        {/* Absent + Follow-up */}
-        {attendanceDone && absentMembers.length > 0 && (
-          <AbsentFollowUp members={absentMembers} />
-        )}
-
-        {/* Empty state when session not yet done */}
-        {!attendanceDone && isOpen && (
-          <div style={{
-            background: color.white, borderRadius: radius.lg,
-            boxShadow: shadow.card, padding: '32px 20px',
-            textAlign: 'center',
-          }}>
-            <p style={{ fontSize: '36px', margin: '0 0 12px' }}>📋</p>
-            <p style={{ fontFamily: font.display, fontSize: fontSize.lg, color: color.navy, margin: '0 0 6px' }}>
-              Ready for today
-            </p>
-            <p style={{ fontSize: fontSize.base, color: color.mist, margin: 0, lineHeight: 1.6 }}>
-              Take attendance to see today's summary and follow-up list.
-            </p>
-          </div>
-        )}
-
+        </div>
       </div>
+
+      <style>{`
+        @keyframes pulseDot {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(255,255,255,0.4); }
+          50%       { box-shadow: 0 0 0 8px rgba(255,255,255,0); }
+        }
+      `}</style>
     </ClassShell>
   )
+}
+
+const sLabel = {
+  fontSize:      fontSize.xs,
+  fontWeight:    '700',
+  color:         color.inkSubtle,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  margin:        '0 0 12px',
+  fontFamily:    font.body,
 }

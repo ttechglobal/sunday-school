@@ -1,16 +1,19 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
-import { ArrowLeft, Plus, X, Check, Clock, Book, Mic } from 'lucide-react'
+import {
+  ArrowLeft, Plus, X, Check,
+  Clock, BookOpen, Mic, Users,
+  Send, Edit2, AlertCircle,
+} from 'lucide-react'
 import ClassShell from '@/components/class/ClassShell'
-import { SkeletonList } from '@/components/class/ui/LoadingSkeleton'
+import { SkeletonList } from '@/components/class/ui/SkeletonCard'
 import { color, font, fontSize, radius, shadow } from '@/styles/tokens'
 
-// ── Default record ────────────────────────────────────────────
 function defaultRecord() {
   return {
-    attendance:  null,   // null = unmarked, true = present, false = absent
+    present:     false,
     onTime:      false,
     bible:       false,
     memoryVerse: false,
@@ -18,233 +21,222 @@ function defaultRecord() {
   }
 }
 
-// ── 3-state attendance button ─────────────────────────────────
-function AttendanceToggle({ value, onChange }) {
-  function next() {
-    if (value === null)  return onChange(true)
-    if (value === true)  return onChange(false)
-    if (value === false) return onChange(null)
-  }
-
-  const cfg =
-    value === true  ? { label: 'Present', bg: color.successBg,  border: color.success,  textColor: color.success,  icon: <Check size={14} strokeWidth={3} /> } :
-    value === false ? { label: 'Absent',  bg: color.errorBg,    border: color.error,    textColor: color.error,    icon: <X    size={14} strokeWidth={3} /> } :
-                      { label: 'Mark',    bg: 'transparent',    border: color.creamDark, textColor: color.mist,    icon: null }
-
+// ── Attribute chip ────────────────────────────────────────────
+function Chip({ icon, label, checked, onChange, accentColor }) {
   return (
     <button
-      onClick={next}
-      style={{
-        display:        'flex',
-        alignItems:     'center',
-        gap:            '5px',
-        height:         '36px',
-        padding:        '0 14px',
-        borderRadius:   radius.full,
-        border:         `2px solid ${cfg.border}`,
-        background:     cfg.bg,
-        color:          cfg.textColor,
-        cursor:         'pointer',
-        fontFamily:     font.body,
-        fontSize:       fontSize.sm,
-        fontWeight:     '700',
-        flexShrink:     0,
-        transition:     'all 0.2s ease',
-        minWidth:       '90px',
-        justifyContent: 'center',
-      }}
-    >
-      {cfg.icon}
-      {cfg.label}
-    </button>
-  )
-}
-
-// ── Chip toggle ───────────────────────────────────────────────
-function Chip({ checked, onChange, label, icon, activeColor, disabled }) {
-  return (
-    <button
-      onClick={() => !disabled && onChange()}
-      disabled={disabled}
+      onClick={onChange}
       style={{
         display:     'inline-flex',
         alignItems:  'center',
         gap:         '5px',
-        height:      '34px',
-        padding:     '0 12px',
+        padding:     '6px 12px',
         borderRadius: radius.full,
-        border:      `1.5px solid ${checked && !disabled ? activeColor : color.creamDark}`,
-        background:  checked && !disabled ? `${activeColor}15` : 'transparent',
-        color:       checked && !disabled ? activeColor : color.mist,
-        cursor:      disabled ? 'not-allowed' : 'pointer',
-        opacity:     disabled ? 0.38 : 1,
+        border:      `1.5px solid ${checked ? accentColor : color.creamBorder}`,
+        background:  checked ? `${accentColor}12` : color.cream,
+        color:       checked ? accentColor : color.inkSubtle,
         fontFamily:  font.body,
-        fontSize:    fontSize.sm,
+        fontSize:    fontSize.xs,
         fontWeight:  '600',
+        cursor:      'pointer',
+        transition:  'all 0.15s ease',
         whiteSpace:  'nowrap',
-        transition:  'all 0.2s ease',
-        flexShrink:  0,
+        userSelect:  'none',
       }}
     >
-      {icon}
-      <span>{label}</span>
+      {icon}{label}
     </button>
   )
 }
 
 // ── Member card ───────────────────────────────────────────────
 function MemberCard({ member, record, onChange, isVisitor, onRemove }) {
-  const isPresent = record.attendance === true
-  const isAbsent  = record.attendance === false
-
-  function handleAttendance(val) {
-    if (val !== true) {
-      onChange({
-        ...record,
-        attendance:  val,
-        onTime:      false,
-        bible:       false,
-        memoryVerse: false,
-        offering:    '',
-      })
-    } else {
-      onChange({ ...record, attendance: val })
-    }
-  }
+  const isPresent = record.present
 
   const firstName = member.first_name || member.firstName || ''
   const lastName  = member.last_name  || member.lastName  || ''
+  const fullName  = member.full_name  ||
+    `${firstName} ${lastName}`.trim() || 'Unknown'
+  const initials  = fullName.split(' ').map(n => n[0]).filter(Boolean).join('').slice(0, 2).toUpperCase() || '?'
+
+  function togglePresent() {
+    if (isPresent) {
+      // Toggling off clears all sub-fields
+      onChange({ present: false, onTime: false, bible: false, memoryVerse: false, offering: '' })
+    } else {
+      onChange({ ...record, present: true })
+    }
+  }
 
   return (
     <div style={{
-      background:  color.white,
-      borderRadius: radius.lg,
-      boxShadow:   shadow.card,
-      overflow:    'hidden',
-      borderLeft:
-        isPresent ? `4px solid ${color.success}` :
-        isAbsent  ? `4px solid ${color.error}`   :
-        isVisitor ? `4px solid ${color.gold}`     :
-                    `4px solid transparent`,
-      transition: 'border-color 0.2s ease',
+      background:    color.white,
+      borderRadius:  radius.xl,
+      border:        `2px solid ${isPresent ? color.navy : color.creamBorder}`,
+      boxShadow:     isPresent ? `0 2px 16px rgba(15,37,87,0.10)` : shadow.card,
+      overflow:      'hidden',
+      transition:    'border-color 0.2s ease, box-shadow 0.2s ease',
     }}>
       {/* Top row */}
       <div style={{
         display:    'flex',
         alignItems: 'center',
-        gap:        '14px',
-        padding:    '16px',
+        gap:        '12px',
+        padding:    '14px 16px',
+        background: isPresent ? 'rgba(15,37,87,0.03)' : 'transparent',
+        transition: 'background 0.2s ease',
       }}>
         {/* Avatar */}
         <div style={{
-          width:           '46px',
-          height:          '46px',
-          borderRadius:    '50%',
-          flexShrink:      0,
-          background:      isPresent ? color.navy : isAbsent ? color.errorBg : color.creamDark,
-          display:         'flex',
-          alignItems:      'center',
-          justifyContent:  'center',
-          transition:      'background 0.2s ease',
+          width:          '46px',
+          height:         '46px',
+          borderRadius:   '50%',
+          flexShrink:     0,
+          background:     isPresent
+            ? `linear-gradient(135deg, ${color.navy}, ${color.navyLight})`
+            : color.creamDark,
+          display:        'flex',
+          alignItems:     'center',
+          justifyContent: 'center',
+          transition:     'background 0.2s ease',
+          fontFamily:     font.heading,
+          fontSize:       '14px',
+          fontWeight:     '700',
+          color:          isPresent ? color.cream : color.inkMuted,
         }}>
-          <span style={{
-            fontSize:   fontSize.sm,
-            fontWeight: '700',
-            color:      isPresent ? color.cream : isAbsent ? color.error : color.mist,
-          }}>
-            {firstName[0]}{lastName[0]}
-          </span>
+          {initials}
         </div>
 
-        {/* Name */}
+        {/* Name + meta */}
         <div style={{ flex: 1, minWidth: 0 }}>
           <p style={{
-            fontFamily:   font.display,
-            fontSize:     fontSize.md,
+            fontFamily:   font.heading,
+            fontSize:     fontSize.base,
             fontWeight:   '700',
-            color:        color.navy,
+            color:        color.ink,
             margin:       0,
-            lineHeight:   1.2,
-            whiteSpace:   'nowrap',
+            lineHeight:   1.3,
             overflow:     'hidden',
             textOverflow: 'ellipsis',
+            whiteSpace:   'nowrap',
           }}>
-            {firstName} {lastName}
+            {fullName}
           </p>
           {isVisitor && (
-            <span className="badge badge-amber" style={{ marginTop: '4px', fontSize: '11px' }}>
+            <span style={{
+              display:      'inline-block',
+              marginTop:    '3px',
+              fontSize:     fontSize['2xs'],
+              fontWeight:   '700',
+              color:        color.goldDark,
+              background:   color.goldLight,
+              padding:      '2px 8px',
+              borderRadius: radius.full,
+            }}>
               First Timer
             </span>
           )}
-          {record.attendance === null && (
-            <p style={{ fontSize: fontSize.xs, color: color.mist, margin: '3px 0 0' }}>
-              Not yet marked
+          {isPresent && (
+            <p style={{ fontSize: fontSize.xs, color: color.navy, margin: '2px 0 0', fontWeight: '600', fontFamily: font.body }}>
+              ✓ Present
             </p>
           )}
         </div>
 
-        {/* 3-state toggle */}
-        <AttendanceToggle value={record.attendance} onChange={handleAttendance} />
+        {/* Present toggle — the ONLY toggle on the card top */}
+        <button
+          onClick={togglePresent}
+          style={{
+            display:        'flex',
+            alignItems:     'center',
+            justifyContent: 'center',
+            width:          '52px',
+            height:         '32px',
+            borderRadius:   radius.full,
+            border:         'none',
+            background:     isPresent ? color.navy : color.creamDark,
+            cursor:         'pointer',
+            flexShrink:     0,
+            transition:     'all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            position:       'relative',
+          }}
+          aria-label={isPresent ? 'Mark absent' : 'Mark present'}
+        >
+          {/* Toggle thumb */}
+          <div style={{
+            position:   'absolute',
+            top:        '3px',
+            left:       isPresent ? 'calc(100% - 26px)' : '3px',
+            width:      '26px',
+            height:     '26px',
+            borderRadius: '50%',
+            background: 'white',
+            boxShadow:  '0 1px 4px rgba(0,0,0,0.2)',
+            transition: 'left 0.25s cubic-bezier(0.34, 1.56, 0.64, 1)',
+            display:    'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            {isPresent && <Check size={14} color={color.navy} strokeWidth={3} />}
+          </div>
+        </button>
 
+        {/* Remove visitor */}
         {isVisitor && (
           <button
             onClick={onRemove}
-            style={{
-              background: 'none',
-              border:     'none',
-              cursor:     'pointer',
-              padding:    '4px',
-              flexShrink: 0,
-              marginLeft: '-8px',
-            }}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px', color: color.inkSubtle, marginLeft: '-4px', flexShrink: 0 }}
           >
-            <X size={16} color={color.mist} />
+            <X size={16} />
           </button>
         )}
       </div>
 
-      {/* Bottom row — only when present */}
-      {isPresent && (
+      {/* Expandable sub-fields — only when present */}
+      <div style={{
+        maxHeight:  isPresent ? '160px' : '0px',
+        overflow:   'hidden',
+        transition: 'max-height 0.3s ease',
+      }}>
         <div style={{
-          padding:     '0 16px 16px',
-          paddingTop:  '12px',
-          display:     'flex',
-          flexWrap:    'wrap',
-          gap:         '8px',
-          alignItems:  'center',
-          borderTop:   `1px solid ${color.creamDark}`,
-          animation:   'slideUp 0.2s ease',
+          padding:    '12px 16px 14px',
+          borderTop:  `1px solid ${color.creamBorder}`,
+          background: color.cream,
+          display:    'flex',
+          flexWrap:   'wrap',
+          gap:        '8px',
+          alignItems: 'center',
         }}>
           <Chip
+            icon={<Clock size={12} />}
+            label="On Time"
             checked={record.onTime}
             onChange={() => onChange({ ...record, onTime: !record.onTime })}
-            label="On Time"
-            icon={<Clock size={13} />}
-            activeColor={color.navy}
+            accentColor={color.navy}
           />
           <Chip
+            icon={<BookOpen size={12} />}
+            label="Bible"
             checked={record.bible}
             onChange={() => onChange({ ...record, bible: !record.bible })}
-            label="Bible"
-            icon={<Book size={13} />}
-            activeColor={color.navyLite}
+            accentColor={color.navyLight}
           />
           <Chip
+            icon={<Mic size={12} />}
+            label="Verse"
             checked={record.memoryVerse}
             onChange={() => onChange({ ...record, memoryVerse: !record.memoryVerse })}
-            label="Verse"
-            icon={<Mic size={13} />}
-            activeColor="#7C3AED"
+            accentColor="#7C3AED"
           />
 
-          {/* Offering input */}
+          {/* Offering */}
           <div style={{ position: 'relative', flex: 1, minWidth: '120px' }}>
             <span style={{
               position:      'absolute',
-              left:          '10px',
+              left:          '11px',
               top:           '50%',
               transform:     'translateY(-50%)',
-              fontSize:      fontSize.base,
+              fontSize:      '14px',
               fontWeight:    '700',
               color:         color.gold,
               pointerEvents: 'none',
@@ -252,6 +244,7 @@ function MemberCard({ member, record, onChange, isVisitor, onRemove }) {
             }}>₦</span>
             <input
               type="number"
+              inputMode="decimal"
               min="0"
               step="0.01"
               placeholder="0.00"
@@ -259,89 +252,56 @@ function MemberCard({ member, record, onChange, isVisitor, onRemove }) {
               onChange={e => onChange({ ...record, offering: e.target.value })}
               style={{
                 width:        '100%',
-                height:       '36px',
-                paddingLeft:  '28px',
+                height:       '38px',
+                paddingLeft:  '26px',
                 paddingRight: '10px',
-                fontSize:     fontSize.base,
-                fontWeight:   '600',
-                color:        color.navy,
-                background:   color.cream,
-                border:       `1.5px solid ${color.creamDark}`,
-                borderRadius: radius.sm,
-                outline:      'none',
                 fontFamily:   font.body,
+                fontSize:     '14px',
+                fontWeight:   '600',
+                color:        color.ink,
+                background:   color.white,
+                border:       `1.5px solid ${color.creamBorder}`,
+                borderRadius: radius.md,
+                outline:      'none',
               }}
             />
           </div>
         </div>
-      )}
+      </div>
     </div>
   )
 }
 
-// ── Add visitor sheet ─────────────────────────────────────────
-function AddVisitorSheet({ onAdd, onClose }) {
+// ── Add visitor modal ─────────────────────────────────────────
+function AddVisitorModal({ onAdd, onClose }) {
   const [name, setName] = useState('')
+  const ref = useRef(null)
+  useEffect(() => { setTimeout(() => ref.current?.focus(), 50) }, [])
 
   return (
-    <div style={{
-      position:   'fixed',
-      inset:      0,
-      background: 'rgba(10,22,40,0.55)',
-      display:    'flex',
-      alignItems: 'flex-end',
-      zIndex:     50,
-    }}>
-      <div style={{
-        background:   color.white,
-        borderRadius: '24px 24px 0 0',
-        padding:      '8px 24px 48px',
-        width:        '100%',
-        maxWidth:     '560px',
-        margin:       '0 auto',
-      }}>
-        <div style={{
-          width:        '40px',
-          height:       '4px',
-          borderRadius: '2px',
-          background:   color.creamDark,
-          margin:       '14px auto 22px',
-        }} />
-        <h3 style={{
-          fontFamily:   font.display,
-          fontSize:     fontSize.lg,
-          color:        color.navy,
-          margin:       '0 0 8px',
-        }}>
-          Add First Timer
-        </h3>
-        <p style={{ fontSize: fontSize.base, color: color.mist, margin: '0 0 20px' }}>
-          Record attendance for a visitor not on your class list.
-        </p>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,26,61,0.55)', display: 'flex', alignItems: 'flex-end', zIndex: 100, backdropFilter: 'blur(2px)' }}>
+      <div style={{ background: color.white, borderRadius: `${radius['2xl']} ${radius['2xl']} 0 0`, padding: '8px 24px 48px', width: '100%', maxWidth: '560px', margin: '0 auto', animation: 'slideUp 0.3s ease' }}>
+        <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: color.creamBorder, margin: '12px auto 22px' }} />
+        <h3 style={{ fontFamily: font.heading, fontSize: fontSize.lg, fontWeight: '700', color: color.ink, margin: '0 0 6px' }}>Add First Timer</h3>
+        <p style={{ fontSize: fontSize.sm, color: color.inkMuted, margin: '0 0 18px', fontFamily: font.body }}>Record a visitor not on your class list.</p>
         <input
+          ref={ref}
           className="input"
           placeholder="Full name"
           value={name}
           onChange={e => setName(e.target.value)}
-          onKeyDown={e => {
-            if (e.key === 'Enter' && name.trim()) {
-              onAdd(name.trim())
-              onClose()
-            }
-          }}
-          autoFocus
-          style={{ marginBottom: '14px', background: color.white }}
+          onKeyDown={e => e.key === 'Enter' && name.trim() && (onAdd(name.trim()), onClose())}
+          style={{ marginBottom: '14px', background: color.cream }}
         />
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button className="btn btn-secondary btn-full" onClick={onClose}>
-            Cancel
-          </button>
+          <button className="btn btn-cream btn-full" onClick={onClose} style={{ fontFamily: font.body }}>Cancel</button>
           <button
-            className="btn btn-primary btn-full"
+            className="btn btn-primary btn-full btn-lg"
             disabled={!name.trim()}
             onClick={() => { onAdd(name.trim()); onClose() }}
+            style={{ fontFamily: font.body }}
           >
-            Add Visitor
+            Add First Timer
           </button>
         </div>
       </div>
@@ -349,96 +309,139 @@ function AddVisitorSheet({ onAdd, onClose }) {
   )
 }
 
-// ── Submit sheet ──────────────────────────────────────────────
-function SubmitSheet({ totals, onConfirm, onClose, loading }) {
-  const rows = [
-    { label: 'Present',       value: totals.present,     color: color.success   },
-    { label: 'Absent',        value: totals.absent,       color: color.error     },
-    { label: 'Unmarked',      value: totals.unmarked,     color: color.mist      },
-    { label: 'On Time',       value: totals.onTime,       color: color.navy      },
-    { label: 'With Bible',    value: totals.bible,        color: color.navyLite  },
-    { label: 'Memory Verse',  value: totals.memoryVerse,  color: '#7C3AED'       },
-    { label: 'First Timers',  value: totals.visitors,     color: color.gold      },
-    {
-      label: 'Total Offering',
-      value: `₦${totals.offering.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`,
-      color: color.goldDark,
-    },
-  ]
+// ── Submit modal ──────────────────────────────────────────────
+function SubmitModal({ totals, members, records, visitors, onConfirm, onClose, loading, isResubmit }) {
+  const presentMembers  = members.filter(m => records[m.id]?.present)
+  const absentMembers   = members.filter(m => !records[m.id]?.present)
+  const presentVisitors = visitors.filter(v => v.record.present)
 
   return (
-    <div style={{
-      position:   'fixed',
-      inset:      0,
-      background: 'rgba(10,22,40,0.55)',
-      display:    'flex',
-      alignItems: 'flex-end',
-      zIndex:     50,
-    }}>
-      <div style={{
-        background:   color.white,
-        borderRadius: '24px 24px 0 0',
-        padding:      '8px 24px 48px',
-        width:        '100%',
-        maxWidth:     '560px',
-        margin:       '0 auto',
-        maxHeight:    '85vh',
-        overflowY:    'auto',
-      }}>
-        <div style={{
-          width:        '40px',
-          height:       '4px',
-          borderRadius: '2px',
-          background:   color.creamDark,
-          margin:       '14px auto 22px',
-        }} />
-        <h3 style={{
-          fontFamily: font.display,
-          fontSize:   fontSize.lg,
-          color:      color.navy,
-          margin:     '0 0 6px',
-        }}>
-          Submit Attendance?
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,26,61,0.55)', display: 'flex', alignItems: 'flex-end', zIndex: 100, backdropFilter: 'blur(2px)' }}>
+      <div style={{ background: color.white, borderRadius: `${radius['2xl']} ${radius['2xl']} 0 0`, padding: '8px 24px 48px', width: '100%', maxWidth: '560px', margin: '0 auto', maxHeight: '88vh', overflowY: 'auto', animation: 'slideUp 0.3s ease' }}>
+        <div style={{ width: '36px', height: '4px', borderRadius: '2px', background: color.creamBorder, margin: '12px auto 22px' }} />
+
+        <h3 style={{ fontFamily: font.heading, fontSize: fontSize.lg, fontWeight: '700', color: color.ink, margin: '0 0 4px' }}>
+          {isResubmit ? 'Resubmit Attendance?' : 'Submit Attendance?'}
         </h3>
-        <p style={{ fontSize: fontSize.base, color: color.mist, margin: '0 0 20px' }}>
-          Review your totals before submitting.
+        <p style={{ fontSize: fontSize.sm, color: color.inkMuted, margin: '0 0 18px', fontFamily: font.body }}>
+          {isResubmit
+            ? 'This replaces the previous submission and resets admin approval.'
+            : 'A record will be written for every member — present and absent.'}
         </p>
 
-        <div style={{
-          background:   color.cream,
-          borderRadius: radius.lg,
-          padding:      '4px 16px',
-          marginBottom: '20px',
-        }}>
-          {rows.map((r, i) => (
-            <div key={r.label} style={{
+        <div style={{ background: color.cream, borderRadius: radius.xl, overflow: 'hidden', marginBottom: '20px' }}>
+          {[
+            { label: 'Present',       value: totals.present,    c: color.success  },
+            { label: 'Absent',        value: totals.absent,      c: color.error    },
+            { label: 'First Timers',  value: totals.visitors,    c: color.gold     },
+            { label: 'On Time',       value: totals.onTime,      c: color.navy     },
+            { label: 'With Bible',    value: totals.bible,       c: color.navyLight },
+            { label: 'Memory Verse',  value: totals.memoryVerse, c: '#7C3AED'      },
+            { label: 'Total Offering',value: `₦${totals.offering.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`, c: color.goldDark },
+          ].map((row, i, arr) => (
+            <div key={row.label} style={{
               display:        'flex',
-              justifyContent: 'space-between',
               alignItems:     'center',
-              padding:        '13px 0',
-              borderBottom:   i < rows.length - 1 ? `1px solid ${color.creamDark}` : 'none',
+              justifyContent: 'space-between',
+              padding:        '13px 18px',
+              borderBottom:   i < arr.length - 1 ? `1px solid ${color.creamBorder}` : 'none',
             }}>
-              <span style={{ fontSize: fontSize.base, color: color.mist }}>{r.label}</span>
-              <span style={{ fontSize: fontSize.md, fontWeight: '700', color: r.color }}>
-                {r.value}
-              </span>
+              <span style={{ fontSize: fontSize.base, color: color.inkMuted, fontFamily: font.body }}>{row.label}</span>
+              <span style={{ fontFamily: font.heading, fontSize: fontSize.md, fontWeight: '700', color: row.c }}>{row.value}</span>
             </div>
           ))}
         </div>
 
+        {/* Absent members list */}
+        {absentMembers.length > 0 && (
+          <div style={{ marginBottom: '16px' }}>
+            <p style={{ fontSize: fontSize.xs, fontWeight: '700', color: color.error, textTransform: 'uppercase', letterSpacing: '0.06em', margin: '0 0 8px', fontFamily: font.body }}>
+              Will be recorded as absent ({absentMembers.length})
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+              {absentMembers.map(m => {
+                const name = m.full_name || `${m.first_name || ''} ${m.last_name || ''}`.trim() || 'Unknown'
+                return (
+                  <span key={m.id} style={{
+                    fontSize:     fontSize.xs,
+                    color:        color.inkMuted,
+                    background:   color.creamDark,
+                    padding:      '3px 10px',
+                    borderRadius: radius.full,
+                    fontFamily:   font.body,
+                  }}>
+                    {name}
+                  </span>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
         <div style={{ display: 'flex', gap: '10px' }}>
-          <button className="btn btn-secondary btn-full" onClick={onClose}>
-            Go Back
-          </button>
+          <button className="btn btn-cream btn-full" onClick={onClose} disabled={loading} style={{ fontFamily: font.body }}>Go Back</button>
           <button
             className="btn btn-primary btn-full btn-lg"
             onClick={onConfirm}
             disabled={loading}
+            style={{ fontFamily: font.body, gap: '8px' }}
           >
-            {loading ? 'Submitting…' : 'Confirm & Submit'}
+            {loading ? 'Submitting…' : (
+              <><Send size={16} /> {isResubmit ? 'Resubmit' : 'Submit All Records'}</>
+            )}
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+// ── Live totals bar ───────────────────────────────────────────
+function TotalsBar({ totals }) {
+  const items = [
+    { label: 'Present',  value: totals.present,    c: color.navy      },
+    { label: 'On Time',  value: totals.onTime,      c: color.navyLight },
+    { label: 'Bible',    value: totals.bible,       c: '#7C3AED'       },
+    { label: 'Offering', value: totals.offering > 0 ? `₦${Number(totals.offering).toLocaleString('en-NG')}` : '₦0', c: color.goldDark },
+  ]
+
+  return (
+    <div style={{
+      display:      'flex',
+      background:   color.white,
+      borderBottom: `1px solid ${color.creamBorder}`,
+      borderTop:    `1px solid ${color.creamBorder}`,
+    }}>
+      {items.map((item, i) => (
+        <div key={item.label} style={{
+          flex:           1,
+          display:        'flex',
+          flexDirection:  'column',
+          alignItems:     'center',
+          padding:        '10px 6px',
+          borderRight:    i < items.length - 1 ? `1px solid ${color.creamBorder}` : 'none',
+        }}>
+          <span style={{
+            fontFamily:   font.heading,
+            fontSize:     fontSize.lg,
+            fontWeight:   '800',
+            color:        item.c,
+            lineHeight:   1,
+            marginBottom: '2px',
+          }}>
+            {item.value}
+          </span>
+          <span style={{
+            fontSize:      fontSize['2xs'],
+            fontWeight:    '600',
+            color:         color.inkSubtle,
+            textTransform: 'uppercase',
+            letterSpacing: '0.04em',
+          }}>
+            {item.label}
+          </span>
+        </div>
+      ))}
     </div>
   )
 }
@@ -447,20 +450,23 @@ function SubmitSheet({ totals, onConfirm, onClose, loading }) {
 export default function AttendancePage() {
   const router = useRouter()
 
-  const [members, setMembers]               = useState([])
-  const [sessionId, setSessionId]           = useState(null)
-  const [classInfo, setClassInfo]           = useState({})
-  const [loading, setLoading]               = useState(true)
-  const [sessionOpen, setSessionOpen]       = useState(false)
-  const [records, setRecords]               = useState({})
-  const [visitors, setVisitors]             = useState([])
-  const [showAddVisitor, setShowAddVisitor] = useState(false)
-  const [showSubmit, setShowSubmit]         = useState(false)
-  const [submitted, setSubmitted]           = useState(false)
-  const [submittedTotals, setSubmittedTotals] = useState(null)
-  const [loadingSubmit, setLoadingSubmit]   = useState(false)
-  const [error, setError]                   = useState('')
+  const [members,          setMembers]          = useState([])
+  const [sessionId,        setSessionId]        = useState(null)
+  const [classInfo,        setClassInfo]        = useState({})
+  const [loading,          setLoading]          = useState(true)
+  const [sessionOpen,      setSessionOpen]      = useState(true)
+  const [records,          setRecords]          = useState({})   // memberId → record
+  const [visitors,         setVisitors]         = useState([])
+  const [showAddVisitor,   setShowAddVisitor]   = useState(false)
+  const [showSubmit,       setShowSubmit]       = useState(false)
+  const [hasSubmitted,     setHasSubmitted]     = useState(false)
+  const [batchStatus,      setBatchStatus]      = useState(null)
+  const [submittedTotals,  setSubmittedTotals]  = useState(null)
+  const [loadingSubmit,    setLoadingSubmit]    = useState(false)
+  const [error,            setError]            = useState('')
+  const [showToast,        setShowToast]        = useState(false)
 
+  // ── Load ───────────────────────────────────────────────────
   useEffect(() => {
     async function load() {
       try {
@@ -469,26 +475,23 @@ export default function AttendancePage() {
           fetch('/api/class/me'),
           fetch('/api/class/members'),
         ])
-
         const [sessData, meData, membersData] = await Promise.all([
-          sessRes.json(),
-          meRes.json(),
-          membersRes.json(),
+          sessRes.json(), meRes.json(), membersRes.json(),
         ])
 
-        setSessionOpen(sessData.isOpen || false)
+        setSessionOpen(sessData.isOpen ?? true)
         setSessionId(sessData.sessionId)
         setClassInfo(meData)
 
         const mems = membersData.members || []
         setMembers(mems)
 
-        // Initialise blank records
+        // Initialise all members as NOT present
         const map = {}
         mems.forEach(m => { map[m.id] = defaultRecord() })
         setRecords(map)
 
-        // If session exists, load any existing submission
+        // Load existing submission
         if (sessData.sessionId && mems.length > 0) {
           const attRes  = await fetch(`/api/class/attendance?sessionId=${sessData.sessionId}`)
           const attData = await attRes.json()
@@ -496,14 +499,12 @@ export default function AttendancePage() {
           if (attRes.ok && attData.records?.length > 0) {
             const existingMap = {}
             mems.forEach(m => { existingMap[m.id] = defaultRecord() })
-
             const newVisitors = []
+
             for (const r of attData.records) {
               if (r.member_id && existingMap[r.member_id] !== undefined) {
                 existingMap[r.member_id] = {
-                  attendance:
-                    r.attendance === 'present' ? true :
-                    r.attendance === 'absent'  ? false : null,
+                  present:     r.attendance === 'present',
                   onTime:      r.on_time      || false,
                   bible:       r.bible        || false,
                   memoryVerse: r.memory_verse || false,
@@ -514,9 +515,7 @@ export default function AttendancePage() {
                   id:   `v-${r.id}`,
                   name: r.visitor_name,
                   record: {
-                    attendance:
-                      r.attendance === 'present' ? true :
-                      r.attendance === 'absent'  ? false : null,
+                    present:     r.attendance === 'present',
                     onTime:      r.on_time      || false,
                     bible:       r.bible        || false,
                     memoryVerse: r.memory_verse || false,
@@ -528,110 +527,120 @@ export default function AttendancePage() {
 
             setRecords(existingMap)
             setVisitors(newVisitors)
-            setSubmitted(true)
+            setHasSubmitted(true)
+            setBatchStatus(attData.batchStatus || 'pending')
           }
         }
       } catch (err) {
         console.error('Attendance load error:', err)
-        setError('Failed to load attendance data. Please refresh.')
+        setError('Failed to load. Please refresh.')
       } finally {
         setLoading(false)
       }
     }
-
     load()
   }, [])
 
+  // ── Totals ─────────────────────────────────────────────────
   function getTotals() {
-    const allRec = [
-      ...members.map(m => records[m.id] || defaultRecord()),
-      ...visitors.map(v => v.record),
-    ]
-    const present  = allRec.filter(r => r.attendance === true).length
-    const absent   = allRec.filter(r => r.attendance === false).length
-    const unmarked = allRec.filter(r => r.attendance === null).length
+    const memberRecs  = members.map(m => records[m.id] || defaultRecord())
+    const visitorRecs = visitors.map(v => v.record)
+    const all         = [...memberRecs, ...visitorRecs]
+
     return {
-      present,
-      absent,
-      unmarked,
-      onTime:      allRec.filter(r => r.onTime).length,
-      bible:       allRec.filter(r => r.bible).length,
-      memoryVerse: allRec.filter(r => r.memoryVerse).length,
-      offering:    allRec.reduce((s, r) => s + (parseFloat(r.offering) || 0), 0),
-      visitors:    visitors.length,
-      total:       allRec.length,
+      present:     all.filter(r => r.present).length,
+      absent:      all.filter(r => !r.present).length,
+      onTime:      all.filter(r => r.onTime).length,
+      bible:       all.filter(r => r.bible).length,
+      memoryVerse: all.filter(r => r.memoryVerse).length,
+      offering:    all.reduce((s, r) => s + (parseFloat(r.offering) || 0), 0),
+      visitors:    visitors.filter(v => v.record.present).length,
+      total:       all.length,
     }
   }
 
+  // ── Submit — writes a record for EVERY member ──────────────
   async function handleSubmit() {
-    if (!sessionId) {
-      setError('No active session found.')
-      return
-    }
+    if (!sessionId) { setError('No active session.'); return }
 
     setLoadingSubmit(true)
+    setError('')
+
     try {
-      const recordsArr = [
-        ...members.map(m => ({
-          memberId:
-            m.id,
-          attendance:
-            records[m.id]?.attendance === true  ? 'present' :
-            records[m.id]?.attendance === false ? 'absent'  : 'unmarked',
-          onTime:      records[m.id]?.onTime      || false,
-          bible:       records[m.id]?.bible       || false,
-          memoryVerse: records[m.id]?.memoryVerse || false,
-          offering:    records[m.id]?.offering    || '0',
-        })),
-        ...visitors.map(v => ({
+      // Build records for ALL members — present OR absent
+      const memberRecords = members.map(m => {
+        const rec = records[m.id] || defaultRecord()
+        return {
+          memberId:    m.id,
+          // If present → 'present', if not → 'absent' (never unmarked for members)
+          attendance:  rec.present ? 'present' : 'absent',
+          onTime:      rec.present ? (rec.onTime      || false) : false,
+          bible:       rec.present ? (rec.bible        || false) : false,
+          memoryVerse: rec.present ? (rec.memoryVerse  || false) : false,
+          offering:    rec.present ? (rec.offering     || '0')   : '0',
+        }
+      })
+
+      // Visitors — only include present ones
+      const visitorRecords = visitors
+        .filter(v => v.record.present)
+        .map(v => ({
           visitorName: v.name,
-          attendance:
-            v.record.attendance === true  ? 'present' :
-            v.record.attendance === false ? 'absent'  : 'unmarked',
+          attendance:  'present',
           onTime:      v.record.onTime      || false,
           bible:       v.record.bible       || false,
           memoryVerse: v.record.memoryVerse || false,
           offering:    v.record.offering    || '0',
-        })),
-      ]
+        }))
 
-      const res = await fetch('/api/class/attendance', {
+      console.log('[attendance submit] writing', memberRecords.length, 'member records +', visitorRecords.length, 'visitors')
+
+      const res  = await fetch('/api/class/attendance', {
         method:  'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ sessionId, records: recordsArr }),
+        body:    JSON.stringify({
+          sessionId,
+          records: [...memberRecords, ...visitorRecords],
+        }),
       })
-
       const data = await res.json()
 
       if (!res.ok) {
-        setError(data.error || 'Failed to submit attendance.')
+        setError(data.error || 'Submission failed. Please try again.')
+        setShowSubmit(false)
         return
       }
 
       setSubmittedTotals(getTotals())
-      setSubmitted(true)
+      setBatchStatus('pending')
+      setHasSubmitted(true)
       setShowSubmit(false)
+      setShowToast(true)
+      setTimeout(() => setShowToast(false), 4000)
 
     } catch (err) {
       console.error('Submit error:', err)
-      setError('Connection error. Please try again.')
+      setError(`Connection error: ${err.message}`)
+      setShowSubmit(false)
     } finally {
       setLoadingSubmit(false)
     }
   }
 
   const totals      = getTotals()
-  const markedCount = totals.present + totals.absent
+  const presentCount = totals.present
 
-  // ── Loading state ──────────────────────────────────────────
+  const statusBanner = hasSubmitted ? {
+    approved: { bg: color.successBg,  border: color.successBorder, text: color.success,  msg: '✓ Approved by admin — you can still edit and resubmit' },
+    rejected: { bg: color.errorBg,    border: color.errorBorder,   text: color.error,    msg: '✗ Rejected — please correct and resubmit' },
+    pending:  { bg: color.warningBg,  border: color.warningBorder, text: color.warning,  msg: '⏳ Submitted — awaiting admin approval' },
+  }[batchStatus || 'pending'] : null
+
   if (loading) {
     return (
-      <ClassShell
-        className={classInfo.className || 'Class'}
-        churchName={classInfo.churchName || ''}
-      >
-        <div style={{ padding: '20px 16px' }}>
-          <SkeletonList count={5} height={100} />
+      <ClassShell className={classInfo.className} churchName={classInfo.churchName} hideBottomNav>
+        <div style={{ padding: '16px', maxWidth: '560px', margin: '0 auto' }}>
+          <SkeletonList count={5} height={90} gap={10} />
         </div>
       </ClassShell>
     )
@@ -641,117 +650,84 @@ export default function AttendancePage() {
     <ClassShell
       className={classInfo.className || 'Class'}
       churchName={classInfo.churchName || ''}
-      rightElement={
-        <span className={`badge ${sessionOpen ? 'badge-green' : 'badge-amber'}`}>
-          {sessionOpen ? 'OPEN' : 'CLOSED'}
-        </span>
-      }
+      hideBottomNav
+      isAdminView={classInfo.isAdminView}
     >
       {/* Sub-header */}
       <div style={{
-        background:   color.white,
-        borderBottom: `1px solid ${color.creamDark}`,
-        padding:      '14px 20px',
-        display:      'flex',
-        alignItems:   'center',
-        gap:          '12px',
-        position:     'sticky',
-        top:          0,
-        zIndex:       15,
+        background:    color.white,
+        borderBottom:  `1px solid ${color.creamBorder}`,
+        padding:       '0 16px',
+        height:        '52px',
+        display:       'flex',
+        alignItems:    'center',
+        gap:           '12px',
+        position:      'sticky',
+        top:           '56px',
+        zIndex:        40,
       }}>
         <button
           onClick={() => router.push('/home')}
-          style={{
-            display:    'flex',
-            alignItems: 'center',
-            gap:        '5px',
-            background: 'none',
-            border:     'none',
-            cursor:     'pointer',
-            fontSize:   fontSize.base,
-            fontWeight: '600',
-            color:      color.navy,
-            padding:    0,
-            flexShrink: 0,
-          }}
+          style={{ display: 'flex', alignItems: 'center', gap: '4px', background: 'none', border: 'none', cursor: 'pointer', color: color.navy, fontFamily: font.body, fontSize: fontSize.sm, fontWeight: '600', padding: '8px 0', flexShrink: 0 }}
         >
-          <ArrowLeft size={17} /> Back
+          <ArrowLeft size={16} /> Back
         </button>
-        <div style={{ width: '1px', height: '18px', background: color.creamDark }} />
-        <p style={{ fontSize: fontSize.base, fontWeight: '700', color: color.navy, margin: 0, flex: 1 }}>
+        <div style={{ width: '1px', height: '20px', background: color.creamBorder }} />
+        <p style={{ fontFamily: font.heading, fontSize: fontSize.base, fontWeight: '700', color: color.ink, margin: 0, flex: 1 }}>
           Attendance
         </p>
-        <span className="badge badge-mist">
-          {members.length + visitors.length} members
-        </span>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <span style={{ fontSize: fontSize.xs, color: color.inkMuted, fontFamily: font.body }}>
+            {members.length} members
+          </span>
+          <span className={`badge ${sessionOpen ? 'badge-green' : 'badge-amber'}`}>
+            {sessionOpen ? 'Open' : 'Closed'}
+          </span>
+        </div>
       </div>
 
-      {/* Error banner */}
+      {/* Totals bar */}
+      <TotalsBar totals={totals} />
+
+      {/* Error */}
       {error && (
-        <div style={{
-          background:   color.errorBg,
-          padding:      '12px 20px',
-          borderBottom: `1px solid rgba(220,38,38,0.2)`,
-        }}>
-          <p style={{ fontSize: fontSize.sm, color: color.error, fontWeight: '600', margin: 0 }}>
-            {error}
+        <div style={{ background: color.errorBg, borderBottom: `1px solid ${color.errorBorder}`, padding: '12px 20px', display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <AlertCircle size={15} color={color.error} style={{ flexShrink: 0 }} />
+          <p style={{ fontSize: fontSize.sm, color: '#991B1B', fontWeight: '600', margin: 0, fontFamily: font.body }}>{error}</p>
+        </div>
+      )}
+
+      {/* Status banner */}
+      {statusBanner && (
+        <div style={{ background: statusBanner.bg, borderBottom: `1px solid ${statusBanner.border}`, padding: '12px 20px', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <Edit2 size={14} color={statusBanner.text} style={{ flexShrink: 0 }} />
+          <p style={{ fontSize: fontSize.sm, fontWeight: '600', color: statusBanner.text, margin: 0, fontFamily: font.body }}>
+            {statusBanner.msg}
           </p>
         </div>
       )}
 
-      {/* Submitted banner */}
-      {submitted && submittedTotals && (
-        <div style={{
-          display:      'flex',
-          alignItems:   'center',
-          gap:          '10px',
-          background:   color.successBg,
-          padding:      '14px 20px',
-          borderBottom: `1px solid ${color.successBorder}`,
-        }}>
-          <Check size={18} color={color.success} />
-          <p style={{ fontSize: fontSize.base, fontWeight: '700', color: color.success, margin: 0 }}>
-            Submitted — {submittedTotals.present} present
-            {submittedTotals.offering > 0 &&
-              ` · ₦${submittedTotals.offering.toLocaleString('en-NG', { minimumFractionDigits: 2 })} offering`
-            }
-          </p>
-        </div>
-      )}
+      {/* Section header */}
+      <div style={{ padding: '12px 20px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', maxWidth: '560px', margin: '0 auto', width: '100%' }}>
+        <p style={{ fontSize: fontSize.xs, fontWeight: '600', color: color.inkSubtle, margin: 0, fontFamily: font.body }}>
+          Toggle present for each member · {presentCount} of {members.length + visitors.length} marked
+        </p>
+        <button
+          onClick={() => setShowAddVisitor(true)}
+          style={{ display: 'flex', alignItems: 'center', gap: '5px', background: 'none', border: 'none', cursor: 'pointer', color: color.navy, fontFamily: font.body, fontSize: fontSize.xs, fontWeight: '700', padding: '4px 0' }}
+        >
+          <Plus size={14} /> First Timer
+        </button>
+      </div>
 
       {/* Member list */}
-      <div style={{
-        flex:       1,
-        padding:    '14px 16px 100px',
-        display:    'flex',
-        flexDirection: 'column',
-        gap:        '10px',
-        maxWidth:   '560px',
-        width:      '100%',
-        margin:     '0 auto',
-      }}>
+      <div style={{ padding: '0 16px 200px', display: 'flex', flexDirection: 'column', gap: '10px', maxWidth: '560px', margin: '0 auto', width: '100%' }}>
 
-        {/* Empty state */}
         {members.length === 0 && visitors.length === 0 ? (
-          <div style={{
-            background:   color.white,
-            borderRadius: radius.lg,
-            padding:      '48px 20px',
-            textAlign:    'center',
-            boxShadow:    shadow.card,
-          }}>
-            <p style={{ fontSize: '36px', margin: '0 0 12px' }}>👥</p>
-            <p style={{
-              fontFamily: font.display,
-              fontSize:   fontSize.lg,
-              color:      color.navy,
-              margin:     '0 0 8px',
-            }}>
-              No members yet
-            </p>
-            <p style={{ fontSize: fontSize.base, color: color.mist, margin: 0 }}>
-              Ask your admin to add members to this class.
-            </p>
+          <div style={{ textAlign: 'center', padding: '48px 20px', background: color.white, borderRadius: radius.xl, border: `1px solid ${color.creamBorder}` }}>
+            <Users size={32} color={color.navy} style={{ marginBottom: '14px', opacity: 0.5 }} />
+            <h3 style={{ fontFamily: font.heading, fontSize: fontSize.md, fontWeight: '700', color: color.ink, margin: '0 0 8px' }}>No members in this class</h3>
+            <p style={{ fontSize: fontSize.sm, color: color.inkMuted, margin: 0, fontFamily: font.body }}>Ask your admin to add members.</p>
           </div>
         ) : (
           <>
@@ -763,125 +739,109 @@ export default function AttendancePage() {
                 onChange={rec => setRecords(p => ({ ...p, [m.id]: rec }))}
               />
             ))}
-
             {visitors.map(v => (
               <MemberCard
                 key={v.id}
-                member={{ first_name: v.name, last_name: '' }}
+                member={{ full_name: v.name }}
                 record={v.record}
-                onChange={rec =>
-                  setVisitors(p => p.map(x => x.id === v.id ? { ...x, record: rec } : x))
-                }
+                onChange={rec => setVisitors(p => p.map(x => x.id === v.id ? { ...x, record: rec } : x))}
                 isVisitor
                 onRemove={() => setVisitors(p => p.filter(x => x.id !== v.id))}
               />
             ))}
           </>
         )}
-
-        {/* Add first timer button */}
-        {!submitted && sessionOpen && (
-          <button
-            onClick={() => setShowAddVisitor(true)}
-            style={{
-              display:      'flex',
-              alignItems:   'center',
-              gap:          '14px',
-              background:   'rgba(201,168,76,0.07)',
-              border:       `2px dashed ${color.gold}`,
-              borderRadius: radius.lg,
-              padding:      '18px 20px',
-              cursor:       'pointer',
-              width:        '100%',
-            }}
-          >
-            <div style={{
-              width:           '40px',
-              height:          '40px',
-              borderRadius:    '12px',
-              background:      'rgba(201,168,76,0.15)',
-              display:         'flex',
-              alignItems:      'center',
-              justifyContent:  'center',
-              flexShrink:      0,
-            }}>
-              <Plus size={20} color={color.gold} />
-            </div>
-            <div style={{ textAlign: 'left' }}>
-              <p style={{ fontSize: fontSize.base, fontWeight: '700', color: color.gold, margin: 0 }}>
-                Add First Timer
-              </p>
-              <p style={{ fontSize: fontSize.sm, color: `${color.gold}99`, margin: '2px 0 0' }}>
-                Record visitor attendance
-              </p>
-            </div>
-          </button>
-        )}
       </div>
 
-      {/* Bottom bar */}
+      {/* Sticky footer */}
       <div style={{
-        position:       'fixed',
-        bottom:         0,
-        left:           0,
-        right:          0,
-        background:     color.white,
-        borderTop:      `1px solid ${color.creamDark}`,
-        padding:        '14px 20px',
-        display:        'flex',
-        alignItems:     'center',
-        justifyContent: 'space-between',
-        boxShadow:      '0 -4px 20px rgba(10,22,40,0.08)',
-        zIndex:         10,
+        position:    'fixed',
+        bottom:      0, left: 0, right: 0,
+        background:  color.white,
+        borderTop:   `1.5px solid ${color.creamBorder}`,
+        padding:     '12px 20px',
+        paddingBottom: 'calc(12px + env(safe-area-inset-bottom, 0px))',
+        display:     'flex',
+        alignItems:  'center',
+        gap:         '14px',
+        zIndex:      30,
+        boxShadow:   '0 -6px 24px rgba(15,37,87,0.08)',
       }}>
-        <div>
-          <p style={{ fontSize: fontSize.md, fontWeight: '700', color: color.navy, margin: 0 }}>
-            {totals.present} present
+        <div style={{ flex: 1 }}>
+          <p style={{ fontFamily: font.heading, fontSize: fontSize.md, fontWeight: '700', color: color.navy, margin: 0, lineHeight: 1 }}>
+            {presentCount} present
           </p>
-          <p style={{ fontSize: fontSize.sm, color: color.mist, margin: '2px 0 0' }}>
-            {markedCount} of {totals.total} marked
-            {totals.offering > 0 &&
-              ` · ₦${totals.offering.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`
-            }
+          <p style={{ fontFamily: font.body, fontSize: fontSize.xs, color: color.inkMuted, margin: '4px 0 0' }}>
+            {members.length - presentCount + visitors.filter(v => !v.record.present).length} will be recorded absent
+            {totals.offering > 0 && ` · ₦${totals.offering.toLocaleString('en-NG', { minimumFractionDigits: 2 })}`}
           </p>
         </div>
 
-        {submitted ? (
-          <span className="badge badge-green" style={{ fontSize: fontSize.sm, padding: '10px 18px' }}>
-            ✓ Submitted
-          </span>
-        ) : (
-          <button
-            className="btn btn-primary btn-lg"
-            onClick={() => setShowSubmit(true)}
-            disabled={markedCount === 0 || !sessionOpen}
-            style={{ minWidth: '130px' }}
-          >
-            Submit
-          </button>
-        )}
+        <button
+          className="btn btn-primary btn-lg"
+          onClick={() => setShowSubmit(true)}
+          disabled={!sessionOpen}
+          style={{ fontFamily: font.body, fontWeight: '700', minWidth: '160px', height: '50px', borderRadius: radius.lg, gap: '8px' }}
+        >
+          {hasSubmitted
+            ? <><Edit2 size={16} /> Update & Resubmit</>
+            : <><Send size={16} /> Submit Attendance</>
+          }
+        </button>
       </div>
 
-      {/* Sheets */}
+      {/* Modals */}
       {showAddVisitor && (
-        <AddVisitorSheet
-          onAdd={name => setVisitors(p => [...p, {
-            id:     `v-${Date.now()}`,
-            name,
-            record: defaultRecord(),
-          }])}
+        <AddVisitorModal
+          onAdd={name => setVisitors(p => [...p, { id: `v-${Date.now()}`, name, record: defaultRecord() }])}
           onClose={() => setShowAddVisitor(false)}
         />
       )}
 
       {showSubmit && (
-        <SubmitSheet
+        <SubmitModal
           totals={getTotals()}
+          members={members}
+          records={records}
+          visitors={visitors}
           onConfirm={handleSubmit}
           onClose={() => setShowSubmit(false)}
           loading={loadingSubmit}
+          isResubmit={hasSubmitted}
         />
       )}
+
+      {/* Toast */}
+      {showToast && (
+        <div style={{
+          position:      'fixed',
+          top:           '72px',
+          left:          '50%',
+          transform:     'translateX(-50%)',
+          zIndex:        200,
+          background:    color.navyDark,
+          color:         color.cream,
+          padding:       '12px 22px',
+          borderRadius:  radius.xl,
+          boxShadow:     shadow.modal,
+          display:       'flex',
+          alignItems:    'center',
+          gap:           '10px',
+          fontSize:      fontSize.sm,
+          fontWeight:    '600',
+          fontFamily:    font.body,
+          whiteSpace:    'nowrap',
+          animation:     'slideUp 0.3s ease',
+          pointerEvents: 'none',
+        }}>
+          <div style={{ width: '22px', height: '22px', borderRadius: '50%', background: color.success, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+            <Check size={13} color="white" strokeWidth={3} />
+          </div>
+          {hasSubmitted ? 'Updated — pending admin approval' : 'Submitted — pending admin approval'}
+        </div>
+      )}
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </ClassShell>
   )
 }

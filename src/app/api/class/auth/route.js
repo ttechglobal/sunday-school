@@ -1,47 +1,66 @@
 import { NextResponse } from 'next/server'
+import { cookies } from 'next/headers'
 import { supabaseAdmin } from '@/lib/supabase/admin'
 import { signClassToken } from '@/lib/auth/classToken'
 
+const COOKIE = 'class_token'
+
 export async function POST(request) {
   try {
-    const { code } = await request.json()
+    const body = await request.json().catch(() => ({}))
+    const code = body?.code?.toString().trim().toUpperCase()
 
-    if (!code || code.length < 6) {
-      return NextResponse.json({ error: 'Invalid code.' }, { status: 400 })
+    if (!code) {
+      return NextResponse.json({ error: 'Class code is required.' }, { status: 400 })
     }
 
-    const cleanCode = code.toUpperCase().replace(/-/g, '').trim()
+    console.log('[class/auth] login attempt:', code)
 
     const { data: cls, error } = await supabaseAdmin
       .from('classes')
-      .select('id, name, church_id, group_name, is_active, churches(name, timezone)')
-      .eq('code', cleanCode)
-      .eq('is_active', true)
-      .single()
+      .select('id, name, code, church_id, is_active, churches(id, name)')
+      .eq('code', code)
+      .maybeSingle()
 
-    if (error || !cls) {
+    if (error) {
+      console.error('[class/auth] DB error:', error.message)
+      return NextResponse.json({ error: 'Database error.' }, { status: 500 })
+    }
+
+    if (!cls) {
+      console.log('[class/auth] not found:', code)
       return NextResponse.json(
-        { error: 'Code not found. Ask your Sunday School admin.' },
+        { error: 'Class code not found. Check with your Sunday School admin.' },
         { status: 404 }
       )
     }
 
+    if (cls.is_active === false) {
+      return NextResponse.json(
+        { error: 'This class has been deactivated. Contact your admin.' },
+        { status: 403 }
+      )
+    }
+
+    if (!cls.church_id) {
+      console.error('[class/auth] class missing church_id:', cls.id)
+      return NextResponse.json(
+        { error: 'Class is not linked to a church. Contact your admin.' },
+        { status: 400 }
+      )
+    }
+
+    console.log('[class/auth] found:', { id: cls.id, churchId: cls.church_id, name: cls.name })
+
     const token = await signClassToken({
       classId:    cls.id,
-      className:  cls.name,
       churchId:   cls.church_id,
-      churchName: cls.churches?.name || '',
-      groupName:  cls.group_name || '',
-      timezone:   cls.churches?.timezone || 'Africa/Lagos',
-    })
-
-    const response = NextResponse.json({
-      success:    true,
       className:  cls.name,
       churchName: cls.churches?.name || '',
     })
 
-    response.cookies.set('class_token', token, {
+    const jar = await cookies()
+    jar.set(COOKIE, token, {
       httpOnly: true,
       secure:   process.env.NODE_ENV === 'production',
       sameSite: 'lax',
@@ -49,18 +68,26 @@ export async function POST(request) {
       path:     '/',
     })
 
-    return response
+    console.log('[class/auth] cookie set OK')
 
+    return NextResponse.json({
+      success:    true,
+      className:  cls.name,
+      churchName: cls.churches?.name || '',
+    })
   } catch (err) {
-    console.error('Class auth error:', err)
-    return NextResponse.json({ error: 'Server error.' }, { status: 500 })
+    console.error('[class/auth] unexpected error:', err)
+    return NextResponse.json({ error: err.message || 'Server error.' }, { status: 500 })
   }
 }
 
 export async function DELETE() {
-  const response = NextResponse.json({ success: true })
-  response.cookies.set('class_token', '', {
-    httpOnly: true, maxAge: 0, path: '/',
-  })
-  return response
+  try {
+    const jar = await cookies()
+    jar.set(COOKIE, '', { maxAge: 0, path: '/' })
+    return NextResponse.json({ success: true })
+  } catch (err) {
+    console.error('[class/auth DELETE]', err)
+    return NextResponse.json({ error: 'Server error.' }, { status: 500 })
+  }
 }
