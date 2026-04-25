@@ -1,26 +1,24 @@
 import { createClient } from '@supabase/supabase-js'
 
-// Lazy singleton — never instantiate at module load time
-let _adminClient = null
+let _client = null
 
-function getAdminClient() {
-  if (_adminClient) return _adminClient
+export function getAdminClient() {
+  if (_client) return _client
 
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-  if (!url) {
+  if (!url || !key) {
     throw new Error(
-      'Missing NEXT_PUBLIC_SUPABASE_URL — add it to .env.local'
-    )
-  }
-  if (!key) {
-    throw new Error(
-      'Missing SUPABASE_SERVICE_ROLE_KEY — add it to .env.local'
+      `Supabase admin client: missing environment variables.\n` +
+      `NEXT_PUBLIC_SUPABASE_URL: ${url ? '✓' : '✗ MISSING'}\n` +
+      `SUPABASE_SERVICE_ROLE_KEY: ${key ? '✓' : '✗ MISSING'}\n` +
+      `In production: add these in Vercel → Settings → Environment Variables\n` +
+      `In development: add these to .env.local`
     )
   }
 
-  _adminClient = createClient(url, key, {
+  _client = createClient(url, key, {
     auth: {
       autoRefreshToken:   false,
       persistSession:     false,
@@ -28,20 +26,15 @@ function getAdminClient() {
     },
   })
 
-  return _adminClient
+  return _client
 }
 
-// Proxy so all existing imports work unchanged:
-// import { supabaseAdmin } from '@/lib/supabase/admin'
-// supabaseAdmin.from('table').select(...)
+// Proxy — all existing imports work unchanged
 export const supabaseAdmin = new Proxy(
   {},
   {
     get(_target, prop) {
       return getAdminClient()[prop]
-    },
-    apply(_target, _thisArg, args) {
-      return getAdminClient()(...args)
     },
   }
 )

@@ -7,9 +7,11 @@ export async function createClient() {
 
   if (!url || !anonKey) {
     throw new Error(
-      `Supabase server client missing env vars.\n` +
-      `NEXT_PUBLIC_SUPABASE_URL: ${url ? 'OK' : 'MISSING'}\n` +
-      `NEXT_PUBLIC_SUPABASE_ANON_KEY: ${anonKey ? 'OK' : 'MISSING'}`
+      `Supabase server client: missing environment variables.\n` +
+      `NEXT_PUBLIC_SUPABASE_URL: ${url ? '✓' : '✗ MISSING'}\n` +
+      `NEXT_PUBLIC_SUPABASE_ANON_KEY: ${anonKey ? '✓' : '✗ MISSING'}\n` +
+      `In production: add these in Vercel → Settings → Environment Variables\n` +
+      `In development: add these to .env.local`
     )
   }
 
@@ -26,7 +28,7 @@ export async function createClient() {
             cookieStore.set(name, value, options)
           })
         } catch {
-          // Server component — can't set cookies, that's OK
+          // Server component context — safe to ignore
         }
       },
     },
