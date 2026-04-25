@@ -89,7 +89,7 @@ function NavItem({ item, active, onClick }) {
 }
 
 function SidebarContent({ pathname, navigate, onClose, showClose }) {
-  const supabase = createClient()
+ 
   const router   = useRouter()
   const [info, setInfo] = useState({ churchName: '', adminName: '' })
 
@@ -110,6 +110,7 @@ function SidebarContent({ pathname, navigate, onClose, showClose }) {
   }, [])
 
   async function handleLogout() {
+    const supabase = createClient()
     await supabase.auth.signOut()
     router.push('/admin-login')
     router.refresh()
