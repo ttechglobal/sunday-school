@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, Suspense } from 'react'
 import { useSearchParams } from 'next/navigation'
 import {
   ArrowLeft, Calendar, Users, DollarSign,
@@ -16,7 +16,9 @@ import { color, font, fontSize, radius, shadow } from '@/styles/tokens'
 
 function formatDate(str) {
   if (!str) return '—'
-  return new Intl.DateTimeFormat('en-NG', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(str))
+  return new Intl.DateTimeFormat('en-NG', {
+    weekday: 'short', day: 'numeric', month: 'short', year: 'numeric',
+  }).format(new Date(str))
 }
 
 function formatNaira(v) {
@@ -59,14 +61,24 @@ function RecordCard({ batch, onClick }) {
             </p>
           </div>
           <p style={{ fontSize: fontSize.xs, color: color.inkSubtle, margin: 0, fontFamily: font.body }}>
-            Submitted {new Intl.DateTimeFormat('en-NG', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }).format(new Date(batch.submitted_at))}
+            Submitted {new Intl.DateTimeFormat('en-NG', {
+              day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit',
+            }).format(new Date(batch.submitted_at))}
           </p>
         </div>
         <StatusBadge status={batch.status} />
       </div>
 
       {/* Stats */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '16px', padding: '12px 14px', background: color.cream, borderRadius: radius.lg, flexWrap: 'wrap' }}>
+      <div style={{
+        display:     'flex',
+        alignItems:  'center',
+        gap:         '16px',
+        padding:     '12px 14px',
+        background:  color.cream,
+        borderRadius: radius.lg,
+        flexWrap:    'wrap',
+      }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
           <Users size={13} color={color.navy} />
           <span style={{ fontSize: fontSize.xs, fontWeight: '600', color: color.navy, fontFamily: font.body }}>
@@ -84,7 +96,15 @@ function RecordCard({ batch, onClick }) {
 
       {/* Rejection reason */}
       {isRejected && batch.rejection_reason && (
-        <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px', padding: '10px 12px', background: color.errorBg, borderRadius: radius.md, border: `1px solid ${color.errorBorder}` }}>
+        <div style={{
+          display:      'flex',
+          alignItems:   'flex-start',
+          gap:          '8px',
+          padding:      '10px 12px',
+          background:   color.errorBg,
+          borderRadius: radius.md,
+          border:       `1px solid ${color.errorBorder}`,
+        }}>
           <X size={13} color={color.error} style={{ flexShrink: 0, marginTop: '1px' }} />
           <p style={{ fontSize: fontSize.xs, color: '#991B1B', margin: 0, fontFamily: font.body, lineHeight: 1.5 }}>
             <strong>Rejected:</strong> {batch.rejection_reason}
@@ -95,23 +115,25 @@ function RecordCard({ batch, onClick }) {
   )
 }
 
-// ── Member row ────────────────────────────────────────────────
+// ── Member row in detail ──────────────────────────────────────
 function MemberRow({ record, isLast }) {
   const name = record.member_type === 'visitor'
     ? record.visitor_name
-    : record.members ? `${record.members.first_name} ${record.members.last_name}` : '—'
+    : record.members
+      ? (record.members.full_name || `${record.members.first_name || ''} ${record.members.last_name || ''}`.trim())
+      : '—'
 
   const isPresent = record.attendance === 'present'
   const isAbsent  = record.attendance === 'absent'
 
   return (
     <div style={{
-      display:     'flex',
-      alignItems:  'center',
-      gap:         '12px',
-      padding:     '12px 16px',
+      display:      'flex',
+      alignItems:   'center',
+      gap:          '12px',
+      padding:      '12px 16px',
       borderBottom: isLast ? 'none' : `1px solid ${color.creamBorder}`,
-      opacity:     isAbsent ? 0.6 : 1,
+      background:   isAbsent ? 'rgba(254,242,242,0.4)' : 'transparent',
     }}>
       {/* Avatar */}
       <div style={{
@@ -130,12 +152,21 @@ function MemberRow({ record, isLast }) {
         fontFamily:     font.heading,
         color:          isPresent ? color.cream : isAbsent ? color.error : color.inkMuted,
       }}>
-        {name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()}
+        {name.split(' ').map(n => n[0]).filter(Boolean).join('').slice(0, 2).toUpperCase() || '?'}
       </div>
 
       {/* Name */}
       <div style={{ flex: 1, minWidth: 0 }}>
-        <p style={{ fontSize: fontSize.sm, fontWeight: '600', color: color.ink, margin: 0, fontFamily: font.body, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+        <p style={{
+          fontSize:     fontSize.sm,
+          fontWeight:   '600',
+          color:        color.ink,
+          margin:       0,
+          fontFamily:   font.body,
+          overflow:     'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace:   'nowrap',
+        }}>
           {name}
         </p>
         {record.member_type === 'visitor' && (
@@ -164,13 +195,13 @@ function MemberRow({ record, isLast }) {
       )}
 
       {isAbsent && (
-        <span style={{ fontSize: fontSize['2xs'], color: color.error, fontWeight: '600', fontFamily: font.body }}>Absent</span>
+        <span style={{ fontSize: fontSize.xs, color: color.error, fontWeight: '600', fontFamily: font.body }}>Absent</span>
       )}
     </div>
   )
 }
 
-// ── Batch detail ──────────────────────────────────────────────
+// ── Batch detail view ─────────────────────────────────────────
 function RecordDetail({ batchId, onBack }) {
   const [batch,   setBatch]   = useState(null)
   const [records, setRecords] = useState([])
@@ -186,7 +217,14 @@ function RecordDetail({ batchId, onBack }) {
     load()
   }, [batchId])
 
-  if (loading) return <div style={{ padding: '20px 16px' }}><SkeletonList count={4} height={70} /></div>
+  if (loading) {
+    return (
+      <div style={{ padding: '20px 16px' }}>
+        <SkeletonList count={4} height={70} />
+      </div>
+    )
+  }
+
   if (!batch) return null
 
   const present  = records.filter(r => r.attendance === 'present')
@@ -197,31 +235,92 @@ function RecordDetail({ batchId, onBack }) {
     if (!items.length) return null
     return (
       <div style={{ marginBottom: '14px' }}>
-        <p style={{ fontSize: fontSize.xs, fontWeight: '700', color: c, letterSpacing: '0.06em', textTransform: 'uppercase', margin: '0 0 8px', paddingLeft: '4px', fontFamily: font.body }}>
+        <p style={{
+          fontSize:      fontSize.xs,
+          fontWeight:    '700',
+          color:         c,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          margin:        '0 0 8px',
+          paddingLeft:   '4px',
+          fontFamily:    font.body,
+        }}>
           {title}
         </p>
-        <div style={{ background: color.white, borderRadius: radius.xl, border: `1px solid ${color.creamBorder}`, overflow: 'hidden', boxShadow: shadow.card }}>
-          {items.map((r, i) => <MemberRow key={i} record={r} isLast={i === items.length - 1} />)}
+        <div style={{
+          background:   color.white,
+          borderRadius: radius.xl,
+          border:       `1px solid ${color.creamBorder}`,
+          overflow:     'hidden',
+          boxShadow:    shadow.card,
+        }}>
+          {items.map((r, i) => (
+            <MemberRow key={i} record={r} isLast={i === items.length - 1} />
+          ))}
         </div>
       </div>
     )
   }
 
   return (
-    <div style={{ maxWidth: '560px', margin: '0 auto', width: '100%', padding: '0 16px 100px' }}>
-      <button onClick={onBack} style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', cursor: 'pointer', color: color.navy, fontFamily: font.body, fontSize: fontSize.sm, fontWeight: '600', padding: '16px 0 12px' }}>
+    <div style={{
+      maxWidth:  '560px',
+      margin:    '0 auto',
+      width:     '100%',
+      padding:   '0 16px 100px',
+    }}>
+      {/* Back */}
+      <button
+        onClick={onBack}
+        style={{
+          display:    'flex',
+          alignItems: 'center',
+          gap:        '6px',
+          background: 'none',
+          border:     'none',
+          cursor:     'pointer',
+          color:      color.navy,
+          fontFamily: font.body,
+          fontSize:   fontSize.sm,
+          fontWeight: '600',
+          padding:    '16px 0 12px',
+        }}
+      >
         <ArrowLeft size={16} /> Back to Records
       </button>
 
       {/* Header card */}
-      <div style={{ background: color.white, borderRadius: radius.xl, boxShadow: shadow.card, padding: '20px', marginBottom: '16px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '14px', flexWrap: 'wrap', gap: '8px' }}>
+      <div style={{
+        background:   color.white,
+        borderRadius: radius.xl,
+        boxShadow:    shadow.card,
+        padding:      '20px',
+        marginBottom: '16px',
+      }}>
+        <div style={{
+          display:        'flex',
+          justifyContent: 'space-between',
+          alignItems:     'flex-start',
+          marginBottom:   '14px',
+          flexWrap:       'wrap',
+          gap:            '8px',
+        }}>
           <div>
-            <p style={{ fontFamily: font.heading, fontSize: fontSize.lg, fontWeight: '800', color: color.ink, margin: '0 0 3px', letterSpacing: '-0.01em' }}>
+            <p style={{
+              fontFamily:   font.heading,
+              fontSize:     fontSize.lg,
+              fontWeight:   '800',
+              color:        color.ink,
+              margin:       '0 0 3px',
+              letterSpacing:'-0.01em',
+            }}>
               {formatDate(batch.sessions?.session_date)}
             </p>
             <p style={{ fontSize: fontSize.xs, color: color.inkSubtle, margin: 0, fontFamily: font.body }}>
-              Submitted {new Intl.DateTimeFormat('en-NG', { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(new Date(batch.submitted_at))}
+              Submitted {new Intl.DateTimeFormat('en-NG', {
+                day: 'numeric', month: 'long', year: 'numeric',
+                hour: '2-digit', minute: '2-digit',
+              }).format(new Date(batch.submitted_at))}
             </p>
           </div>
           <StatusBadge status={batch.status} />
@@ -230,15 +329,35 @@ function RecordDetail({ batchId, onBack }) {
         {/* Stats grid */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' }}>
           {[
-            { label: 'Present',  value: batch.present_count,                                c: color.success  },
-            { label: 'Absent',   value: batch.record_count - batch.present_count,           c: color.error    },
-            { label: 'Offering', value: formatNaira(batch.total_offering),                  c: color.goldDark },
+            { label: 'Present',  value: batch.present_count,                          c: color.success  },
+            { label: 'Absent',   value: batch.record_count - batch.present_count,     c: color.error    },
+            { label: 'Offering', value: formatNaira(batch.total_offering),            c: color.goldDark },
           ].map(s => (
-            <div key={s.label} style={{ background: color.cream, borderRadius: radius.lg, padding: '12px', textAlign: 'center' }}>
-              <p style={{ fontFamily: font.heading, fontSize: fontSize.lg, fontWeight: '800', color: s.c, margin: '0 0 3px', letterSpacing: '-0.02em' }}>
+            <div key={s.label} style={{
+              background:   color.cream,
+              borderRadius: radius.lg,
+              padding:      '12px',
+              textAlign:    'center',
+            }}>
+              <p style={{
+                fontFamily:   font.heading,
+                fontSize:     fontSize.lg,
+                fontWeight:   '800',
+                color:        s.c,
+                margin:       '0 0 3px',
+                letterSpacing:'-0.02em',
+              }}>
                 {s.value}
               </p>
-              <p style={{ fontSize: fontSize['2xs'], fontWeight: '700', color: color.inkSubtle, margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em', fontFamily: font.body }}>
+              <p style={{
+                fontSize:      fontSize['2xs'],
+                fontWeight:    '700',
+                color:         color.inkSubtle,
+                margin:        0,
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em',
+                fontFamily:    font.body,
+              }}>
                 {s.label}
               </p>
             </div>
@@ -247,7 +366,13 @@ function RecordDetail({ batchId, onBack }) {
 
         {/* Rejection reason */}
         {batch.rejection_reason && (
-          <div style={{ marginTop: '12px', padding: '12px 14px', background: color.errorBg, borderRadius: radius.md, border: `1px solid ${color.errorBorder}` }}>
+          <div style={{
+            marginTop:    '12px',
+            padding:      '12px 14px',
+            background:   color.errorBg,
+            borderRadius: radius.md,
+            border:       `1px solid ${color.errorBorder}`,
+          }}>
             <p style={{ fontSize: fontSize.sm, color: '#991B1B', margin: 0, fontFamily: font.body }}>
               <strong>Rejected:</strong> {batch.rejection_reason}
             </p>
@@ -255,15 +380,15 @@ function RecordDetail({ batchId, onBack }) {
         )}
       </div>
 
-      <Section title={`Present (${present.length})`} c={color.success} items={present} />
-      <Section title={`First Timers (${visitors.length})`} c={color.gold} items={visitors} />
-      <Section title={`Absent (${absent.length})`} c={color.error} items={absent} />
+      <Section title={`Present (${present.length})`}      c={color.success} items={present}  />
+      <Section title={`First Timers (${visitors.length})`} c={color.gold}   items={visitors} />
+      <Section title={`Absent (${absent.length})`}        c={color.error}   items={absent}   />
     </div>
   )
 }
 
-// ── Main page ─────────────────────────────────────────────────
-export default function HistoryPage() {
+// ── Inner page — uses useSearchParams so must be inside Suspense ──
+function HistoryInner() {
   const searchParams = useSearchParams()
 
   const [batches,     setBatches]     = useState([])
@@ -273,6 +398,7 @@ export default function HistoryPage() {
   const [year,        setYear]        = useState(new Date().getFullYear())
   const [showFilters, setShowFilters] = useState(false)
   const [selectedId,  setSelectedId]  = useState(searchParams.get('session'))
+  const [classInfo,   setClassInfo]   = useState(null)
 
   const fetchRecords = useCallback(async () => {
     setLoading(true)
@@ -280,10 +406,16 @@ export default function HistoryPage() {
       const params = new URLSearchParams()
       if (month > 0) params.set('month', month)
       if (year  > 0) params.set('year',  year)
-      const res  = await fetch(`/api/class/records?${params}`)
-      const data = await res.json()
-      if (res.ok) setBatches(data.batches || [])
-    } finally { setLoading(false) }
+      const [res, meRes] = await Promise.all([
+        fetch(`/api/class/records?${params}`),
+        fetch('/api/class/me'),
+      ])
+      const [data, me] = await Promise.all([res.json(), meRes.json()])
+      if (res.ok)  setBatches(data.batches || [])
+      if (meRes.ok) setClassInfo(me)
+    } finally {
+      setLoading(false)
+    }
   }, [month, year])
 
   useEffect(() => { fetchRecords() }, [fetchRecords])
@@ -295,24 +427,50 @@ export default function HistoryPage() {
     { id: 'rejected', label: 'Rejected', count: batches.filter(b => b.status === 'rejected').length },
   ]
 
-  const filtered = filter === 'all' ? batches : batches.filter(b => b.status === filter)
+  const filtered = filter === 'all'
+    ? batches
+    : batches.filter(b => b.status === filter)
 
   if (selectedId) {
     return (
-      <ClassShell>
-        <RecordDetail batchId={selectedId} onBack={() => setSelectedId(null)} />
+      <ClassShell
+        className={classInfo?.className}
+        churchName={classInfo?.churchName}
+        isAdminView={classInfo?.isAdminView}
+      >
+        <RecordDetail
+          batchId={selectedId}
+          onBack={() => setSelectedId(null)}
+        />
       </ClassShell>
     )
   }
 
   return (
-    <ClassShell>
+    <ClassShell
+      className={classInfo?.className}
+      churchName={classInfo?.churchName}
+      isAdminView={classInfo?.isAdminView}
+    >
       <div style={{ maxWidth: '560px', margin: '0 auto', width: '100%' }}>
 
         {/* Header */}
-        <div style={{ padding: '20px 20px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '12px' }}>
+        <div style={{
+          padding:        '20px 20px 0',
+          display:        'flex',
+          alignItems:     'center',
+          justifyContent: 'space-between',
+          gap:            '12px',
+        }}>
           <div>
-            <h1 style={{ fontFamily: font.heading, fontSize: fontSize.xl, fontWeight: '800', color: color.ink, margin: '0 0 2px', letterSpacing: '-0.02em' }}>
+            <h1 style={{
+              fontFamily:   font.heading,
+              fontSize:     fontSize.xl,
+              fontWeight:   '800',
+              color:        color.ink,
+              margin:       '0 0 2px',
+              letterSpacing:'-0.02em',
+            }}>
               Records
             </h1>
             <p style={{ fontSize: fontSize.xs, color: color.inkMuted, margin: 0, fontFamily: font.body }}>
@@ -341,32 +499,68 @@ export default function HistoryPage() {
           </button>
         </div>
 
+        {/* Filters */}
         {showFilters && (
           <div style={{ padding: '14px 20px', animation: 'slideUp 0.2s ease' }}>
-            <MonthYearPicker month={month} year={year} onMonthChange={setMonth} onYearChange={setYear} />
+            <MonthYearPicker
+              month={month}
+              year={year}
+              onMonthChange={setMonth}
+              onYearChange={setYear}
+            />
           </div>
         )}
 
+        {/* Tabs */}
         <div style={{ padding: '14px 20px 0', overflowX: 'auto' }}>
           <FilterTabs tabs={tabs} active={filter} onChange={setFilter} />
         </div>
 
-        <div style={{ padding: '14px 16px 100px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
+        {/* Content */}
+        <div style={{
+          padding:       '14px 16px 100px',
+          display:       'flex',
+          flexDirection: 'column',
+          gap:           '10px',
+        }}>
           {loading ? (
             <SkeletonList count={4} height={130} />
           ) : filtered.length === 0 ? (
             <EmptyState
               icon={<FileText size={28} />}
               title="No records found"
-              message={filter !== 'all' ? `No ${filter} records for this period.` : 'Submit attendance to see records here.'}
+              message={
+                filter !== 'all'
+                  ? `No ${filter} records for this period.`
+                  : 'Submit attendance to see records here.'
+              }
             />
           ) : (
             filtered.map(batch => (
-              <RecordCard key={batch.id} batch={batch} onClick={() => setSelectedId(batch.id)} />
+              <RecordCard
+                key={batch.id}
+                batch={batch}
+                onClick={() => setSelectedId(batch.id)}
+              />
             ))
           )}
         </div>
       </div>
+
+      <style>{`@keyframes slideUp { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }`}</style>
     </ClassShell>
+  )
+}
+
+// ── Default export — wraps in Suspense for useSearchParams ────
+export default function HistoryPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ padding: '24px 16px' }}>
+        <SkeletonList count={4} height={130} />
+      </div>
+    }>
+      <HistoryInner />
+    </Suspense>
   )
 }
