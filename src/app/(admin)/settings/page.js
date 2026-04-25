@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Check, AlertCircle, Loader2 } from 'lucide-react'
-import PageHeader from '@/components/ui/PageHeader'
+import PageHeader from '@/components/class/ui/PageHeader'
 import { color, font, fontSize, radius, shadow } from '@/styles/tokens'
 
 function Field({ label, optional, children }) {
