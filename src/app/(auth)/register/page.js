@@ -2,322 +2,340 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Eye, EyeOff, Check } from 'lucide-react'
+import Link from 'next/link'
+import { Eye, EyeOff, AlertCircle, Loader2, Check } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { color, font, fontSize, radius, shadow } from '@/styles/tokens'
 
-export default function RegisterPage() {
-  const router    = useRouter()
-  const supabase  = createClient()
-
-  const [step, setStep]       = useState(1)
-  const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
-  const [showPw, setShowPw]   = useState(false)
-  const [showConfirm, setShowConfirm] = useState(false)
-
-  const [form, setForm] = useState({
-    churchName:    '',
-    churchAddress: '',
-    fullName:      '',
-    email:         '',
-    password:      '',
-    confirmPassword: '',
-  })
-
-  function set(field, value) {
-    setForm(p => ({ ...p, [field]: value }))
-    setError('')
-  }
-
-  function validateStep1() {
-    if (!form.churchName.trim()) { setError('Church name is required.'); return false }
-    return true
-  }
-
-  function validateStep2() {
-    if (!form.fullName.trim())   { setError('Your name is required.'); return false }
-    if (!form.email.trim())      { setError('Email is required.'); return false }
-    if (form.password.length < 6){ setError('Password must be at least 6 characters.'); return false }
-    if (form.password !== form.confirmPassword) { setError('Passwords do not match.'); return false }
-    return true
-  }
-
-  async function handleSubmit() {
-    if (!validateStep2()) return
-
-    setLoading(true)
-    setError('')
-
-    try {
-      // 1. Create the church first via service-role API
-      const churchRes = await fetch('/api/admin/setup-church', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({
-          churchName:    form.churchName.trim(),
-          churchAddress: form.churchAddress.trim(),
-        }),
-      })
-      const churchData = await churchRes.json()
-
-      if (!churchRes.ok) {
-        setError(churchData.error || 'Failed to create church.')
-        setLoading(false)
-        return
-      }
-
-      const churchId = churchData.churchId
-
-      // 2. Sign up with Supabase Auth — pass church_id and name in metadata
-      //    The DB trigger will auto-create the profile row
-      const { error: signUpError } = await supabase.auth.signUp({
-        email:    form.email.trim().toLowerCase(),
-        password: form.password,
-        options: {
-          data: {
-            full_name: form.fullName.trim(),
-            church_id: churchId,
-          },
-        },
-      })
-
-      if (signUpError) {
-        // Church was created but signup failed — delete the church
-        await fetch(`/api/admin/setup-church?churchId=${churchId}`, {
-          method: 'DELETE',
-        })
-
-        if (signUpError.message.toLowerCase().includes('already registered')) {
-          setError('An account with this email already exists.')
-        } else {
-          setError(signUpError.message)
-        }
-        setLoading(false)
-        return
-      }
-
-      // 3. Success — redirect to dashboard
-      router.push('/dashboard')
-
-    } catch (err) {
-      console.error(err)
-      setError('Something went wrong. Please try again.')
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div style={s.page}>
-      <div style={s.card}>
-
-        {/* Logo */}
-        <div style={s.logoArea}>
-          <div style={s.logoRing}>
-            <svg width="40" height="40" viewBox="0 0 48 48" fill="none">
-              <path d="M24 10 C20 9 10 9 7 11 L7 38 C10 36 20 37 24 38 Z" fill="rgba(245,240,232,0.9)" />
-              <path d="M24 10 C28 9 38 9 41 11 L41 38 C38 36 28 37 24 38 Z" fill="rgba(245,240,232,0.9)" />
-              <rect x="22.5" y="9" width="3" height="30" rx="1.5" fill={color.cream} />
-              <rect x="30.5" y="15" width="2.5" height="14" rx="1.25" fill={color.gold} />
-              <rect x="25.5" y="20" width="12" height="2.5" rx="1.25" fill={color.gold} />
-              <path d="M37 9 L37 16 L35 14.5 L33 16 L33 9 Z" fill={color.gold} />
-            </svg>
-          </div>
-          <h1 style={s.title}>Create Your Church Account</h1>
-          <p style={s.sub}>Set up Sunday School for your church</p>
-        </div>
-
-        {/* Step indicator */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          {['Church', 'Account'].map((label, i) => {
-            const num    = i + 1
-            const active = step === num
-            const done   = step > num
-            return (
-              <div key={label} style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1 }}>
-                <div style={{
-                  width: '28px', height: '28px', borderRadius: '50%', flexShrink: 0,
-                  background: done ? color.success : active ? color.navy : color.creamDark,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                }}>
-                  {done
-                    ? <Check size={14} color="#fff" strokeWidth={3} />
-                    : <span style={{ fontSize: '12px', fontWeight: '700', color: active ? color.cream : color.mist }}>{num}</span>
-                  }
-                </div>
-                <span style={{ fontSize: fontSize.sm, fontWeight: active ? '700' : '400', color: active ? color.navy : color.mist }}>
-                  {label}
-                </span>
-                {i === 0 && (
-                  <div style={{ flex: 1, height: '1px', background: done ? color.success : color.creamDark }} />
-                )}
-              </div>
-            )
-          })}
-        </div>
-
-        <div style={{ height: '1px', background: color.creamDark }} />
-
-        {/* Step 1 */}
-        {step === 1 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <Field label="Church Name *">
-              <input
-                className="input"
-                placeholder="e.g. Covenant Chapel"
-                value={form.churchName}
-                onChange={e => set('churchName', e.target.value)}
-                onKeyDown={e => e.key === 'Enter' && validateStep1() && setStep(2)}
-                autoFocus
-                style={{ background: color.white }}
-              />
-            </Field>
-            <Field label="Church Address (optional)">
-              <input
-                className="input"
-                placeholder="e.g. 12 Broad Street, Lagos"
-                value={form.churchAddress}
-                onChange={e => set('churchAddress', e.target.value)}
-                style={{ background: color.white }}
-              />
-            </Field>
-            {error && <ErrorMsg>{error}</ErrorMsg>}
-            <button
-              className="btn btn-primary btn-full btn-lg"
-              onClick={() => validateStep1() && setStep(2)}
-            >
-              Continue →
-            </button>
-          </div>
-        )}
-
-        {/* Step 2 */}
-        {step === 2 && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-            <Field label="Your Full Name *">
-              <input
-                className="input"
-                placeholder="e.g. Elder Amaka Obi"
-                value={form.fullName}
-                onChange={e => set('fullName', e.target.value)}
-                autoFocus
-                style={{ background: color.white }}
-              />
-            </Field>
-            <Field label="Email Address *">
-              <input
-                className="input"
-                type="email"
-                placeholder="admin@church.org"
-                value={form.email}
-                onChange={e => set('email', e.target.value)}
-                style={{ background: color.white }}
-              />
-            </Field>
-            <Field label="Password *">
-              <PasswordInput
-                value={form.password}
-                onChange={v => set('password', v)}
-                show={showPw}
-                onToggle={() => setShowPw(p => !p)}
-                placeholder="At least 6 characters"
-              />
-            </Field>
-            <Field label="Confirm Password *">
-              <PasswordInput
-                value={form.confirmPassword}
-                onChange={v => set('confirmPassword', v)}
-                show={showConfirm}
-                onToggle={() => setShowConfirm(p => !p)}
-                placeholder="Repeat your password"
-                onEnter={handleSubmit}
-              />
-            </Field>
-            {error && <ErrorMsg>{error}</ErrorMsg>}
-            <div style={{ display: 'flex', gap: '10px' }}>
-              <button
-                className="btn btn-secondary"
-                onClick={() => { setStep(1); setError('') }}
-                style={{ flexShrink: 0 }}
-              >
-                ← Back
-              </button>
-              <button
-                className="btn btn-primary btn-full btn-lg"
-                onClick={handleSubmit}
-                disabled={loading}
-              >
-                {loading ? 'Creating account…' : 'Create Account'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        <p style={{ fontSize: fontSize.sm, color: color.mist, textAlign: 'center' }}>
-          Already have an account?{' '}
-          <button
-            onClick={() => router.push('/admin-login')}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', color: color.navy, fontWeight: '700', fontSize: fontSize.sm, fontFamily: font.body }}
-          >
-            Sign in
-          </button>
-        </p>
-      </div>
-    </div>
-  )
-}
-
-// ── Small helper components ───────────────────────────────────
-function Field({ label, children }) {
-  return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-      <label style={{ fontSize: '11px', fontWeight: '700', color: color.mist, letterSpacing: '0.07em', textTransform: 'uppercase' }}>
-        {label}
-      </label>
-      {children}
-    </div>
-  )
-}
-
-function PasswordInput({ value, onChange, show, onToggle, placeholder, onEnter }) {
+function PasswordInput({ value, onChange, placeholder, id, error }) {
+  const [show, setShow] = useState(false)
   return (
     <div style={{ position: 'relative' }}>
       <input
-        className="input"
+        id={id}
         type={show ? 'text' : 'password'}
-        placeholder={placeholder}
         value={value}
-        onChange={e => onChange(e.target.value)}
-        onKeyDown={e => e.key === 'Enter' && onEnter?.()}
-        style={{ background: color.white, paddingRight: '44px' }}
+        onChange={onChange}
+        placeholder={placeholder}
+        style={{
+          width: '100%', height: '48px',
+          padding: '0 44px 0 14px',
+          fontFamily: font.body, fontSize: fontSize.base,
+          color: color.ink, background: color.cream,
+          border: `1.5px solid ${error ? color.error : color.creamBorder}`,
+          borderRadius: radius.md, outline: 'none',
+          boxSizing: 'border-box', transition: 'border-color 0.15s',
+        }}
+        onFocus={e => { if (!error) e.target.style.borderColor = color.navy }}
+        onBlur={e =>  { if (!error) e.target.style.borderColor = color.creamBorder }}
       />
       <button
         type="button"
-        onClick={onToggle}
-        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex' }}
+        onClick={() => setShow(p => !p)}
+        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: color.inkSubtle, display: 'flex', padding: '4px' }}
       >
-        {show
-          ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color.mist} strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-          : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color.mist} strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-        }
+        {show ? <EyeOff size={17} /> : <Eye size={17} />}
       </button>
     </div>
   )
 }
 
-function ErrorMsg({ children }) {
+function FieldError({ msg }) {
+  if (!msg) return null
   return (
-    <div style={{ background: color.errorBg, border: `1px solid rgba(220,38,38,0.2)`, borderRadius: radius.sm, padding: '12px 14px' }}>
-      <p style={{ fontSize: fontSize.sm, color: color.error, fontWeight: '600', margin: 0 }}>{children}</p>
+    <p style={{ fontSize: fontSize.xs, color: color.error, margin: '5px 0 0', fontFamily: font.body, display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <AlertCircle size={12} /> {msg}
+    </p>
+  )
+}
+
+const labelStyle = {
+  display:       'block',
+  fontSize:      fontSize.xs,
+  fontWeight:    '700',
+  color:         color.inkMuted,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  marginBottom:  '6px',
+  fontFamily:    font.body,
+}
+
+function InputField({ label, type = 'text', value, onChange, placeholder, error, autoComplete }) {
+  return (
+    <div>
+      <label style={labelStyle}>{label}</label>
+      <input
+        type={type}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        autoComplete={autoComplete}
+        style={{
+          width: '100%', height: '48px', padding: '0 14px',
+          fontFamily: font.body, fontSize: fontSize.base,
+          color: color.ink, background: color.cream,
+          border: `1.5px solid ${error ? color.error : color.creamBorder}`,
+          borderRadius: radius.md, outline: 'none',
+          boxSizing: 'border-box', transition: 'border-color 0.15s',
+        }}
+        onFocus={e => { if (!error) e.target.style.borderColor = color.navy }}
+        onBlur={e =>  { if (!error) e.target.style.borderColor = color.creamBorder }}
+      />
+      <FieldError msg={error} />
     </div>
   )
 }
 
-const s = {
-  page:    { minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px', background: color.cream, fontFamily: font.body },
-  card:    { background: color.white, borderRadius: radius.xl, boxShadow: shadow.modal, padding: '36px 28px', width: '100%', maxWidth: '460px', display: 'flex', flexDirection: 'column', gap: '24px' },
-  logoArea:{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '10px' },
-  logoRing:{ width: '72px', height: '72px', borderRadius: '20px', background: color.navy, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: `0 8px 24px rgba(10,22,40,0.25)` },
-  title:   { fontFamily: font.display, fontSize: fontSize.lg, color: color.navy, margin: 0, textAlign: 'center' },
-  sub:     { fontSize: fontSize.sm, color: color.mist, margin: 0, textAlign: 'center' },
+export default function RegisterPage() {
+  const router   = useRouter()
+  const supabase = createClient()
+
+  const [form, setForm] = useState({
+    churchName: '',
+    fullName:   '',
+    email:      '',
+    password:   '',
+    confirm:    '',
+  })
+  const [loading,  setLoading]  = useState(false)
+  const [errors,   setErrors]   = useState({})
+  const [apiError, setApiError] = useState('')
+  const [success,  setSuccess]  = useState(false)
+
+  function set(field, value) {
+    setForm(p => ({ ...p, [field]: value }))
+    setErrors(p => ({ ...p, [field]: '' }))
+    setApiError('')
+  }
+
+  function validate() {
+    const e = {}
+    if (!form.churchName.trim()) e.churchName = 'Church name is required.'
+    if (!form.fullName.trim())   e.fullName   = 'Your full name is required.'
+    if (!form.email.trim())      e.email      = 'Email is required.'
+    else if (!/\S+@\S+\.\S+/.test(form.email)) e.email = 'Enter a valid email address.'
+    if (!form.password)          e.password   = 'Password is required.'
+    else if (form.password.length < 8) e.password = 'Password must be at least 8 characters.'
+    if (!form.confirm)           e.confirm    = 'Please confirm your password.'
+    else if (form.password !== form.confirm) e.confirm = 'Passwords do not match.'
+    setErrors(e)
+    return Object.keys(e).length === 0
+  }
+
+  async function handleSubmit(ev) {
+    ev.preventDefault()
+    if (!validate()) return
+
+    setLoading(true)
+    setApiError('')
+
+    try {
+      // 1. Create church
+      const churchRes  = await fetch('/api/admin/setup-church', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body:    JSON.stringify({ churchName: form.churchName.trim() }),
+      })
+      const churchData = await churchRes.json()
+
+      if (!churchRes.ok) {
+        setApiError(churchData.error || 'Failed to create church. Please try again.')
+        setLoading(false)
+        return
+      }
+
+      // 2. Sign up
+      const { error: signUpError } = await supabase.auth.signUp({
+        email:    form.email.trim(),
+        password: form.password,
+        options:  {
+          data: {
+            full_name:  form.fullName.trim(),
+            church_id:  churchData.churchId,
+          },
+        },
+      })
+
+      if (signUpError) {
+        setApiError(signUpError.message)
+        setLoading(false)
+        return
+      }
+
+      setSuccess(true)
+
+    } catch (err) {
+      setApiError('Unexpected error. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  if (success) {
+    return (
+      <div style={{
+        minHeight: '100vh', background: color.cream,
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '24px 16px',
+      }}>
+        <div style={{
+          width: '100%', maxWidth: '400px', background: color.white,
+          borderRadius: radius['2xl'], boxShadow: shadow.modal, padding: '40px 28px', textAlign: 'center',
+        }}>
+          <div style={{
+            width: '64px', height: '64px', borderRadius: '50%', background: color.successBg,
+            border: `2px solid ${color.successBorder}`, display: 'flex', alignItems: 'center',
+            justifyContent: 'center', margin: '0 auto 20px',
+          }}>
+            <Check size={28} color={color.success} strokeWidth={2.5} />
+          </div>
+          <h2 style={{ fontFamily: font.heading, fontSize: fontSize.xl, fontWeight: '800', color: color.ink, margin: '0 0 10px' }}>
+            Account Created!
+          </h2>
+          <p style={{ fontSize: fontSize.sm, color: color.inkMuted, margin: '0 0 24px', fontFamily: font.body, lineHeight: 1.6 }}>
+            Check your email for a confirmation link, then sign in to access your dashboard.
+          </p>
+          <Link
+            href="/admin-login"
+            style={{
+              display: 'block', width: '100%', height: '48px', lineHeight: '48px',
+              background: color.navy, color: color.cream, borderRadius: radius.md,
+              fontFamily: font.heading, fontSize: fontSize.base, fontWeight: '700',
+              textDecoration: 'none', textAlign: 'center',
+            }}
+          >
+            Go to Sign In
+          </Link>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div style={{
+      minHeight: '100vh', background: color.cream,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      padding: '24px 16px', fontFamily: font.body,
+    }}>
+      <div style={{
+        width: '100%', maxWidth: '440px', background: color.white,
+        borderRadius: radius['2xl'], boxShadow: shadow.modal, overflow: 'hidden',
+      }}>
+        {/* Header */}
+        <div style={{
+          background: `linear-gradient(135deg, ${color.navyDark}, ${color.navy})`,
+          padding: '28px 28px 24px', textAlign: 'center',
+        }}>
+          <h1 style={{
+            fontFamily: font.heading, fontSize: fontSize.xl, fontWeight: '800',
+            color: color.cream, margin: 0, letterSpacing: '-0.02em',
+          }}>
+            Sunday School
+          </h1>
+          <p style={{ fontSize: fontSize.sm, color: 'rgba(250,246,240,0.65)', margin: '4px 0 0' }}>
+            Create your church account
+          </p>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} style={{ padding: '28px' }}>
+          <h2 style={{
+            fontFamily: font.heading, fontSize: fontSize.lg, fontWeight: '700',
+            color: color.ink, margin: '0 0 20px', letterSpacing: '-0.01em',
+          }}>
+            Get started
+          </h2>
+
+          {apiError && (
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: '8px',
+              padding: '12px 14px', background: color.errorBg,
+              border: `1px solid ${color.errorBorder}`, borderRadius: radius.md, marginBottom: '16px',
+            }}>
+              <AlertCircle size={15} color={color.error} style={{ flexShrink: 0, marginTop: '1px' }} />
+              <p style={{ fontSize: fontSize.sm, color: '#991B1B', margin: 0, lineHeight: 1.5 }}>{apiError}</p>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+            <InputField
+              label="Church Name *"
+              value={form.churchName}
+              onChange={e => set('churchName', e.target.value)}
+              placeholder="e.g. Redeemed Parish Lagos"
+              error={errors.churchName}
+              autoComplete="organization"
+            />
+            <InputField
+              label="Your Full Name *"
+              value={form.fullName}
+              onChange={e => set('fullName', e.target.value)}
+              placeholder="e.g. Pastor James Okafor"
+              error={errors.fullName}
+              autoComplete="name"
+            />
+            <InputField
+              label="Email Address *"
+              type="email"
+              value={form.email}
+              onChange={e => set('email', e.target.value)}
+              placeholder="admin@yourchurch.com"
+              error={errors.email}
+              autoComplete="email"
+            />
+            <div>
+              <label style={labelStyle}>Password *</label>
+              <PasswordInput
+                id="password"
+                value={form.password}
+                onChange={e => set('password', e.target.value)}
+                placeholder="At least 8 characters"
+                error={!!errors.password}
+              />
+              <FieldError msg={errors.password} />
+            </div>
+            <div>
+              <label style={labelStyle}>Confirm Password *</label>
+              <PasswordInput
+                id="confirm"
+                value={form.confirm}
+                onChange={e => set('confirm', e.target.value)}
+                placeholder="Repeat your password"
+                error={!!errors.confirm}
+              />
+              <FieldError msg={errors.confirm} />
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={loading}
+            style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+              width: '100%', height: '48px',
+              background: loading ? color.creamDark : color.navy,
+              color: loading ? color.inkMuted : color.cream,
+              border: 'none', borderRadius: radius.md,
+              fontFamily: font.heading, fontSize: fontSize.base, fontWeight: '700',
+              cursor: loading ? 'not-allowed' : 'pointer', marginTop: '24px',
+              transition: 'all 0.15s', letterSpacing: '-0.01em',
+            }}
+          >
+            {loading
+              ? <><Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite' }} /> Creating account…</>
+              : 'Create Account'
+            }
+          </button>
+
+          <p style={{ textAlign: 'center', fontSize: fontSize.sm, color: color.inkMuted, margin: '20px 0 0' }}>
+            Already have an account?{' '}
+            <Link href="/admin-login" style={{ color: color.navy, fontWeight: '700', textDecoration: 'none' }}>
+              Sign in
+            </Link>
+          </p>
+        </form>
+      </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+    </div>
+  )
 }

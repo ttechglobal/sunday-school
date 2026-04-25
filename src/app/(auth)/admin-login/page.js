@@ -1,62 +1,126 @@
 'use client'
 
 import { useState } from 'react'
-import { useRouter, useSearchParams } from 'next/navigation'
+import { useRouter } from 'next/navigation'
+import Link from 'next/link'
+import { Eye, EyeOff, AlertCircle, Loader2 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { color, font, fontSize, radius, shadow } from '@/styles/tokens'
 
-function BibleLogo({ size = 48 }) {
+function BibleLogo() {
   return (
-    <svg width={size} height={size} viewBox="0 0 48 48" fill="none">
-      <path d="M24 10 C20 9 10 9 7 11 L7 38 C10 36 20 37 24 38 Z" fill="rgba(245,240,232,0.85)" />
-      <path d="M24 10 C28 9 38 9 41 11 L41 38 C38 36 28 37 24 38 Z" fill="rgba(245,240,232,0.85)" />
-      <rect x="22.5" y="9" width="3" height="30" rx="1.5" fill={color.cream} />
-      <rect x="30.5" y="15" width="2.5" height="14" rx="1.25" fill={color.gold} />
-      <rect x="25.5" y="20" width="12" height="2.5" rx="1.25" fill={color.gold} />
-      <path d="M37 9 L37 16 L35 14.5 L33 16 L33 9 Z" fill={color.gold} />
-    </svg>
+    <div style={{
+      width: '56px', height: '56px', borderRadius: '16px',
+      background: `linear-gradient(135deg, ${color.navyDark}, ${color.navy})`,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      boxShadow: '0 8px 24px rgba(10,26,61,0.3)', flexShrink: 0, margin: '0 auto 14px',
+    }}>
+      <svg width="32" height="32" viewBox="0 0 48 48" fill="none">
+        <path d="M24 10 C20 9 10 9 7 11 L7 38 C10 36 20 37 24 38 Z" fill="rgba(250,246,240,0.9)" />
+        <path d="M24 10 C28 9 38 9 41 11 L41 38 C38 36 28 37 24 38 Z" fill="rgba(250,246,240,0.9)" />
+        <rect x="22.5" y="9" width="3" height="30" rx="1.5" fill={color.cream} />
+        <rect x="30.5" y="15" width="2.5" height="14" rx="1.25" fill={color.gold} />
+        <rect x="25.5" y="20" width="12" height="2.5" rx="1.25" fill={color.gold} />
+        <path d="M37 9 L37 16 L35 14.5 L33 16 L33 9 Z" fill={color.gold} />
+      </svg>
+    </div>
   )
 }
 
-const AUTH_ERRORS = {
-  'Invalid login credentials': 'Incorrect email or password.',
-  'Email not confirmed':       'Please confirm your email before signing in.',
-  'Too many requests':         'Too many attempts. Please wait a moment and try again.',
+function PasswordInput({ value, onChange, placeholder, id, error }) {
+  const [show, setShow] = useState(false)
+  return (
+    <div style={{ position: 'relative' }}>
+      <input
+        id={id}
+        type={show ? 'text' : 'password'}
+        value={value}
+        onChange={onChange}
+        placeholder={placeholder}
+        autoComplete="current-password"
+        style={{
+          width: '100%', height: '48px',
+          padding: '0 44px 0 14px',
+          fontFamily: font.body, fontSize: fontSize.base,
+          color: color.ink, background: color.cream,
+          border: `1.5px solid ${error ? color.error : color.creamBorder}`,
+          borderRadius: radius.md, outline: 'none',
+          boxSizing: 'border-box',
+          transition: 'border-color 0.15s',
+        }}
+        onFocus={e => { if (!error) e.target.style.borderColor = color.navy }}
+        onBlur={e =>  { if (!error) e.target.style.borderColor = color.creamBorder }}
+      />
+      <button
+        type="button"
+        onClick={() => setShow(p => !p)}
+        style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', color: color.inkSubtle, display: 'flex', padding: '4px' }}
+      >
+        {show ? <EyeOff size={17} /> : <Eye size={17} />}
+      </button>
+    </div>
+  )
+}
+
+function FieldError({ msg }) {
+  if (!msg) return null
+  return (
+    <p style={{ fontSize: fontSize.xs, color: color.error, margin: '5px 0 0', fontFamily: font.body, display: 'flex', alignItems: 'center', gap: '4px' }}>
+      <AlertCircle size={12} /> {msg}
+    </p>
+  )
 }
 
 function friendlyError(msg) {
-  for (const [key, val] of Object.entries(AUTH_ERRORS)) {
-    if (msg?.includes(key)) return val
+  if (!msg) return 'Something went wrong. Please try again.'
+  const m = msg.toLowerCase()
+  if (m.includes('invalid login') || m.includes('invalid credentials') || m.includes('invalid email or password')) {
+    return 'Incorrect email or password. Please check and try again.'
   }
-  return msg || 'Sign in failed. Please try again.'
+  if (m.includes('email not confirmed')) {
+    return 'Your email has not been confirmed. Check your inbox for a confirmation link.'
+  }
+  if (m.includes('too many requests')) {
+    return 'Too many attempts. Please wait a few minutes before trying again.'
+  }
+  if (m.includes('user not found')) {
+    return 'No account found with this email. Please sign up first.'
+  }
+  return msg
 }
 
 export default function AdminLoginPage() {
-  const router       = useRouter()
-  const searchParams = useSearchParams()
-  const registered   = searchParams.get('registered')
-  const supabase     = createClient()
+  const router   = useRouter()
+  const supabase = createClient()
 
-  const [email, setEmail]       = useState('')
+  const [email,    setEmail]    = useState('')
   const [password, setPassword] = useState('')
-  const [showPw, setShowPw]     = useState(false)
-  const [error, setError]       = useState('')
-  const [loading, setLoading]   = useState(false)
+  const [loading,  setLoading]  = useState(false)
+  const [errors,   setErrors]   = useState({})
+  const [apiError, setApiError] = useState('')
 
-  async function handleLogin() {
-    setError('')
-    if (!email.trim()) { setError('Email is required.'); return }
-    if (!password)     { setError('Password is required.'); return }
+  function validate() {
+    const e = {}
+    if (!email.trim())       e.email    = 'Email is required.'
+    else if (!/\S+@\S+\.\S+/.test(email)) e.email = 'Enter a valid email address.'
+    if (!password)           e.password = 'Password is required.'
+    setErrors(e)
+    return Object.keys(e).length === 0
+  }
 
+  async function handleSubmit(ev) {
+    ev.preventDefault()
+    if (!validate()) return
     setLoading(true)
+    setApiError('')
 
-    const { error: authError } = await supabase.auth.signInWithPassword({
-      email:    email.trim().toLowerCase(),
+    const { error } = await supabase.auth.signInWithPassword({
+      email:    email.trim(),
       password,
     })
 
-    if (authError) {
-      setError(friendlyError(authError.message))
+    if (error) {
+      setApiError(friendlyError(error.message))
       setLoading(false)
       return
     }
@@ -66,128 +130,167 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div style={s.page}>
-      {/* Left panel — desktop only */}
-      <div style={s.left}>
-        <BibleLogo size={52} />
-        <h1 style={s.leftTitle}>Sunday School</h1>
-        <p style={s.leftSub}>
-          Attendance and offering management for your church — simple, fast, and reliable.
-        </p>
-        <div style={s.features}>
-          {[
-            'Track attendance across all classes',
-            'Record individual member offerings',
-            'Follow up with absent members',
-            'Generate church-wide reports',
-          ].map(f => (
-            <div key={f} style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-              <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: color.gold, flexShrink: 0 }} />
-              <span style={{ fontSize: fontSize.base, color: 'rgba(245,240,232,0.75)' }}>{f}</span>
-            </div>
-          ))}
+    <div style={{
+      minHeight:      '100vh',
+      background:     color.cream,
+      display:        'flex',
+      alignItems:     'center',
+      justifyContent: 'center',
+      padding:        '24px 16px',
+      fontFamily:     font.body,
+    }}>
+      <div style={{
+        width:         '100%',
+        maxWidth:      '400px',
+        background:    color.white,
+        borderRadius:  radius['2xl'],
+        boxShadow:     shadow.modal,
+        overflow:      'hidden',
+      }}>
+        {/* Navy header strip */}
+        <div style={{
+          background:  `linear-gradient(135deg, ${color.navyDark}, ${color.navy})`,
+          padding:     '32px 28px 28px',
+          textAlign:   'center',
+        }}>
+          <BibleLogo />
+          <h1 style={{
+            fontFamily:   font.heading,
+            fontSize:     fontSize.xl,
+            fontWeight:   '800',
+            color:        color.cream,
+            margin:       0,
+            letterSpacing:'-0.02em',
+          }}>
+            Sunday School
+          </h1>
+          <p style={{ fontSize: fontSize.sm, color: 'rgba(250,246,240,0.65)', margin: '4px 0 0', fontFamily: font.body }}>
+            Admin Portal
+          </p>
         </div>
-      </div>
 
-      {/* Right panel — form */}
-      <div style={s.right}>
-        <div style={s.card}>
+        {/* Form */}
+        <form onSubmit={handleSubmit} style={{ padding: '28px' }}>
+          <h2 style={{
+            fontFamily:   font.heading,
+            fontSize:     fontSize.lg,
+            fontWeight:   '700',
+            color:        color.ink,
+            margin:       '0 0 20px',
+            letterSpacing:'-0.01em',
+          }}>
+            Sign in to your account
+          </h2>
 
-          {registered && (
-            <div style={{ background: color.successBg, border: `1px solid ${color.successBorder}`, borderRadius: radius.sm, padding: '12px 16px' }}>
-              <p style={{ fontSize: fontSize.sm, fontWeight: '600', color: color.success, margin: 0 }}>
-                ✓ Account created successfully. Sign in below.
+          {/* API error */}
+          {apiError && (
+            <div style={{
+              display:      'flex',
+              alignItems:   'flex-start',
+              gap:          '8px',
+              padding:      '12px 14px',
+              background:   color.errorBg,
+              border:       `1px solid ${color.errorBorder}`,
+              borderRadius: radius.md,
+              marginBottom: '16px',
+            }}>
+              <AlertCircle size={15} color={color.error} style={{ flexShrink: 0, marginTop: '1px' }} />
+              <p style={{ fontSize: fontSize.sm, color: '#991B1B', margin: 0, fontFamily: font.body, lineHeight: 1.5 }}>
+                {apiError}
               </p>
             </div>
           )}
 
-          <div>
-            <h2 style={{ fontFamily: font.display, fontSize: fontSize.xl, color: color.navy, margin: '0 0 4px' }}>
-              Admin Sign In
-            </h2>
-            <p style={{ fontSize: fontSize.sm, color: color.mist, margin: 0 }}>
-              Welcome back — sign in to your dashboard.
-            </p>
-          </div>
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            <div style={s.field}>
-              <label style={s.label}>Email Address</label>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+            {/* Email */}
+            <div>
+              <label style={labelStyle}>Email Address</label>
               <input
-                className="input"
                 type="email"
-                placeholder="admin@church.org"
                 value={email}
-                onChange={e => { setEmail(e.target.value); setError('') }}
-                onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                autoFocus
-                style={{ background: color.white }}
+                onChange={e => { setEmail(e.target.value); setErrors(p => ({ ...p, email: '' })); setApiError('') }}
+                placeholder="admin@yourchurch.com"
+                autoComplete="email"
+                style={{
+                  width: '100%', height: '48px',
+                  padding: '0 14px',
+                  fontFamily: font.body, fontSize: fontSize.base,
+                  color: color.ink, background: color.cream,
+                  border: `1.5px solid ${errors.email ? color.error : color.creamBorder}`,
+                  borderRadius: radius.md, outline: 'none',
+                  boxSizing: 'border-box', transition: 'border-color 0.15s',
+                }}
+                onFocus={e => { if (!errors.email) e.target.style.borderColor = color.navy }}
+                onBlur={e =>  { if (!errors.email) e.target.style.borderColor = color.creamBorder }}
               />
+              <FieldError msg={errors.email} />
             </div>
 
-            <div style={s.field}>
-              <label style={s.label}>Password</label>
-              <div style={{ position: 'relative' }}>
-                <input
-                  className="input"
-                  type={showPw ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={e => { setPassword(e.target.value); setError('') }}
-                  onKeyDown={e => e.key === 'Enter' && handleLogin()}
-                  style={{ background: color.white, paddingRight: '48px' }}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPw(p => !p)}
-                  style={{ position: 'absolute', right: '12px', top: '50%', transform: 'translateY(-50%)', background: 'none', border: 'none', cursor: 'pointer', display: 'flex', padding: '4px' }}
-                >
-                  {showPw
-                    ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color.mist} strokeWidth="2"><path d="M17.94 17.94A10.07 10.07 0 0112 20c-7 0-11-8-11-8a18.45 18.45 0 015.06-5.94"/><path d="M9.9 4.24A9.12 9.12 0 0112 4c7 0 11 8 11 8a18.5 18.5 0 01-2.16 3.19"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
-                    : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={color.mist} strokeWidth="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                  }
-                </button>
-              </div>
+            {/* Password */}
+            <div>
+              <label style={labelStyle}>Password</label>
+              <PasswordInput
+                id="password"
+                value={password}
+                onChange={e => { setPassword(e.target.value); setErrors(p => ({ ...p, password: '' })); setApiError('') }}
+                placeholder="Your password"
+                error={!!errors.password}
+              />
+              <FieldError msg={errors.password} />
             </div>
           </div>
-
-          {error && (
-            <div style={{ background: color.errorBg, border: `1px solid rgba(220,38,38,0.2)`, borderRadius: radius.sm, padding: '12px 16px' }}>
-              <p style={{ fontSize: fontSize.sm, color: color.error, fontWeight: '600', margin: 0 }}>{error}</p>
-            </div>
-          )}
 
           <button
-            className="btn btn-primary btn-full btn-lg"
-            onClick={handleLogin}
+            type="submit"
             disabled={loading}
+            style={{
+              display:        'flex',
+              alignItems:     'center',
+              justifyContent: 'center',
+              gap:            '8px',
+              width:          '100%',
+              height:         '48px',
+              background:     loading ? color.creamDark : color.navy,
+              color:          loading ? color.inkMuted : color.cream,
+              border:         'none',
+              borderRadius:   radius.md,
+              fontFamily:     font.heading,
+              fontSize:       fontSize.base,
+              fontWeight:     '700',
+              cursor:         loading ? 'not-allowed' : 'pointer',
+              marginTop:      '24px',
+              transition:     'all 0.15s',
+              letterSpacing:  '-0.01em',
+            }}
           >
-            {loading ? 'Signing in…' : 'Sign In'}
+            {loading ? (
+              <><Loader2 size={18} style={{ animation: 'spin 0.8s linear infinite' }} /> Signing in…</>
+            ) : (
+              'Sign In'
+            )}
           </button>
 
-          <p style={{ fontSize: fontSize.sm, color: color.mist, textAlign: 'center', margin: 0 }}>
-            New church?{' '}
-            <button
-              onClick={() => router.push('/register')}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: color.navy, fontWeight: '700', fontSize: fontSize.sm, fontFamily: font.body }}
-            >
-              Create a free account →
-            </button>
+          <p style={{ textAlign: 'center', fontSize: fontSize.sm, color: color.inkMuted, margin: '20px 0 0', fontFamily: font.body }}>
+            Don't have an account?{' '}
+            <Link href="/register" style={{ color: color.navy, fontWeight: '700', textDecoration: 'none' }}>
+              Sign up
+            </Link>
           </p>
-        </div>
+        </form>
       </div>
+
+      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   )
 }
 
-const s = {
-  page:      { minHeight: '100vh', display: 'flex', fontFamily: font.body },
-  left:      { background: color.navy, flex: '0 0 420px', padding: '60px 48px', display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '24px' },
-  leftTitle: { fontFamily: font.display, fontSize: '2.25rem', color: color.cream, margin: 0 },
-  leftSub:   { fontSize: fontSize.base, color: 'rgba(245,240,232,0.55)', lineHeight: 1.7, maxWidth: '300px' },
-  features:  { display: 'flex', flexDirection: 'column', gap: '14px', marginTop: '8px' },
-  right:     { flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 24px', background: color.cream },
-  card:      { background: color.white, borderRadius: radius.xl, boxShadow: shadow.modal, padding: '40px 32px', width: '100%', maxWidth: '420px', display: 'flex', flexDirection: 'column', gap: '20px' },
-  field:     { display: 'flex', flexDirection: 'column', gap: '8px' },
-  label:     { fontSize: '11px', fontWeight: '700', color: color.mist, letterSpacing: '0.07em', textTransform: 'uppercase' },
+const labelStyle = {
+  display:       'block',
+  fontSize:      fontSize.xs,
+  fontWeight:    '700',
+  color:         color.inkMuted,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  marginBottom:  '6px',
+  fontFamily:    font.body,
 }

@@ -2,118 +2,111 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
-import { Plus, Copy, Check, RefreshCw, ArrowLeft, Users, X } from 'lucide-react'
-import { createClient } from '@/lib/supabase/client'
-import { SkeletonList } from '@/components/class/ui/LoadingSkeleton'
+import {
+  Plus, Copy, Edit2, Trash2, Users,
+  ChevronRight, X, Check, ExternalLink,
+  BookOpen,
+} from 'lucide-react'
+import PageHeader from '@/components/class/ui/PageHeader'
 import EmptyState from '@/components/class/ui/EmptyState'
+import { SkeletonList } from '@/components/class/ui/SkeletonCard'
 import { color, font, fontSize, radius, shadow } from '@/styles/tokens'
 
-// ── Helpers ───────────────────────────────────────────────────
-function formatCode(code) {
-  if (!code) return ''
-  return code.slice(0, 4) + '-' + code.slice(4)
-}
+const DEFAULT_GROUPS = ['Youth', 'Men', 'Women', 'Teens', 'Children', 'General']
 
-// ── Copy button ───────────────────────────────────────────────
-function CopyButton({ text }) {
-  const [copied, setCopied] = useState(false)
-  function copy() {
-    navigator.clipboard.writeText(text)
-    setCopied(true)
-    setTimeout(() => setCopied(false), 2000)
-  }
+// ── Toast ──────────────────────────────────────────────────────
+function Toast({ msg, onDone }) {
+  useEffect(() => { const t = setTimeout(onDone, 2500); return () => clearTimeout(t) }, [onDone])
   return (
-    <button
-      onClick={copy}
-      className="btn btn-secondary btn-sm"
-      style={{ gap: '6px', flexShrink: 0 }}
-    >
-      {copied ? <Check size={13} /> : <Copy size={13} />}
-      {copied ? 'Copied!' : 'Copy'}
-    </button>
+    <div style={{
+      position: 'fixed', top: '20px', right: '20px', zIndex: 300,
+      background: color.navyDark, color: color.cream,
+      padding: '10px 18px', borderRadius: radius.xl, boxShadow: shadow.modal,
+      fontSize: fontSize.sm, fontWeight: '600', fontFamily: font.body,
+      display: 'flex', alignItems: 'center', gap: '8px', animation: 'slideUp 0.3s ease',
+    }}>
+      <Check size={14} color={color.success} /> {msg}
+    </div>
   )
 }
 
-// ── Create class modal ────────────────────────────────────────
-function CreateClassModal({ onClose, onCreate, classes: existingClasses }) {
-  const [name, setName]       = useState('')
-  const [group, setGroup]     = useState('')
-  const [loading, setLoading] = useState(false)
-  const [error, setError]     = useState('')
+// ── Class modal (create/edit) ──────────────────────────────────
+function ClassModal({ cls, onClose, onSave }) {
+  const isEdit = !!cls
+  const [name,      setName]      = useState(cls?.name       || '')
+  const [groupName, setGroupName] = useState(cls?.group_name || 'General')
+  const [custom,    setCustom]    = useState(DEFAULT_GROUPS.includes(cls?.group_name || 'General') ? '' : cls?.group_name || '')
+  const [loading,   setLoading]   = useState(false)
+  const [error,     setError]     = useState('')
 
-  async function handleCreate() {
+  const isCustom = !DEFAULT_GROUPS.includes(groupName)
+
+  async function handleSave() {
     if (!name.trim()) { setError('Class name is required.'); return }
+    const finalGroup = groupName === '__custom__' ? custom.trim() : groupName
+    if (!finalGroup) { setError('Group name is required.'); return }
+
     setLoading(true)
-    setError('')
     try {
-      const res  = await fetch('/api/admin/classes', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ name: name.trim(), groupName: group.trim() }),
+      const url    = isEdit ? `/api/admin/classes/${cls.id}` : '/api/admin/classes'
+      const method = isEdit ? 'PATCH' : 'POST'
+      const res    = await fetch(url, {
+        method, headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), groupName: finalGroup }),
       })
       const data = await res.json()
-      if (!res.ok) { setError(data.error || 'Failed to create class.'); setLoading(false); return }
-      onCreate(data.class)
+      if (!res.ok) { setError(data.error || 'Failed.'); setLoading(false); return }
+      onSave(isEdit ? data.class : data.class, isEdit)
       onClose()
-    } catch {
-      setError('Connection error. Please try again.')
-      setLoading(false)
-    }
+    } catch { setError('Connection error.'); setLoading(false) }
   }
 
   return (
-    <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,22,40,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 50, padding: '20px' }}>
-      <div style={{ background: '#fff', borderRadius: radius.xl, padding: '32px', width: '100%', maxWidth: '440px', boxShadow: shadow.modal }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <h3 style={{ fontFamily: font.display, fontSize: fontSize.lg, color: color.navy, margin: 0 }}>New Class</h3>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '4px' }}>
-            <X size={20} color={color.mist} />
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,26,61,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px', backdropFilter: 'blur(2px)' }}>
+      <div style={{ background: color.white, borderRadius: radius['2xl'], padding: '28px', width: '100%', maxWidth: '420px', boxShadow: shadow.modal, animation: 'scaleIn 0.2s ease' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h3 style={{ fontFamily: font.heading, fontSize: fontSize.lg, fontWeight: '700', color: color.ink, margin: 0 }}>
+            {isEdit ? 'Edit Class' : 'New Class'}
+          </h3>
+          <button onClick={onClose} style={{ background: color.creamDark, border: 'none', borderRadius: radius.sm, width: '32px', height: '32px', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <X size={16} color={color.inkMuted} />
           </button>
         </div>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={s.label}>Class Name *</label>
-            <input
-              className="input"
-              placeholder="e.g. Youth A, Men's Class"
-              value={name}
-              onChange={e => { setName(e.target.value); setError('') }}
-              onKeyDown={e => e.key === 'Enter' && handleCreate()}
-              autoFocus
-              style={{ background: color.cream }}
-            />
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            <label style={s.label}>Group (optional)</label>
-            <input
-              className="input"
-              placeholder="e.g. Youth, Men, Women, Seniors"
-              value={group}
-              onChange={e => setGroup(e.target.value)}
-              style={{ background: color.cream }}
-            />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <div>
+            <label style={lbl}>Class Name *</label>
+            <input className="input" placeholder="e.g. Youth Class 1" value={name} onChange={e => { setName(e.target.value); setError('') }} autoFocus style={{ background: color.cream }} />
           </div>
 
-          <div style={{ background: color.cream, borderRadius: radius.md, padding: '14px 16px' }}>
-            <p style={{ fontSize: fontSize.xs, fontWeight: '700', color: color.mist, margin: '0 0 4px', letterSpacing: '0.06em', textTransform: 'uppercase' }}>
-              Class Code
-            </p>
-            <p style={{ fontSize: fontSize.sm, color: color.navy, margin: 0, lineHeight: 1.5 }}>
-              A unique code will be automatically generated when the class is created. Share it with your class teacher to log in.
-            </p>
+          <div>
+            <label style={lbl}>Group *</label>
+            <select
+              className="input"
+              value={DEFAULT_GROUPS.includes(groupName) ? groupName : '__custom__'}
+              onChange={e => { setGroupName(e.target.value); setError('') }}
+              style={{ background: color.cream }}
+            >
+              {DEFAULT_GROUPS.map(g => <option key={g} value={g}>{g}</option>)}
+              <option value="__custom__">Custom group…</option>
+            </select>
           </div>
 
-          {error && (
-            <div style={{ background: color.errorBg, border: `1px solid rgba(220,38,38,0.2)`, borderRadius: radius.sm, padding: '10px 14px' }}>
-              <p style={{ fontSize: fontSize.sm, color: color.error, fontWeight: '600', margin: 0 }}>{error}</p>
+          {(!DEFAULT_GROUPS.includes(groupName) || groupName === '__custom__') && (
+            <div>
+              <label style={lbl}>Custom Group Name *</label>
+              <input className="input" placeholder="e.g. Married Couples" value={custom} onChange={e => { setCustom(e.target.value); setError('') }} style={{ background: color.cream }} />
             </div>
           )}
 
-          <div style={{ display: 'flex', gap: '10px', marginTop: '4px' }}>
-            <button className="btn btn-secondary btn-full" onClick={onClose}>Cancel</button>
-            <button className="btn btn-primary btn-full" onClick={handleCreate} disabled={loading}>
-              {loading ? 'Creating…' : 'Create Class'}
+          {error && (
+            <p style={{ fontSize: fontSize.sm, color: color.error, margin: 0, fontFamily: font.body }}>{error}</p>
+          )}
+
+          <div style={{ display: 'flex', gap: '10px', paddingTop: '4px' }}>
+            <button className="btn btn-cream btn-full" onClick={onClose} style={{ fontFamily: font.body }}>Cancel</button>
+            <button className="btn btn-primary btn-full btn-lg" onClick={handleSave} disabled={loading} style={{ fontFamily: font.body }}>
+              {loading ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Class'}
             </button>
           </div>
         </div>
@@ -122,352 +115,322 @@ function CreateClassModal({ onClose, onCreate, classes: existingClasses }) {
   )
 }
 
-// ── Class detail view ─────────────────────────────────────────
-function ClassDetail({ cls, onBack, onUpdate }) {
-  const [members, setMembers]           = useState([])
-  const [loading, setLoading]           = useState(true)
-  const [showAddMember, setShowAddMember] = useState(false)
-  const [newFirst, setNewFirst]         = useState('')
-  const [newLast, setNewLast]           = useState('')
-  const [addError, setAddError]         = useState('')
-  const [addLoading, setAddLoading]     = useState(false)
-  const [regenerating, setRegenerating] = useState(false)
-  const [currentCode, setCurrentCode]   = useState(cls.code)
+// ── Delete confirmation modal ──────────────────────────────────
+function DeleteModal({ cls, onClose, onDeleted }) {
+  const [typed,   setTyped]   = useState('')
+  const [loading, setLoading] = useState(false)
+  const [error,   setError]   = useState('')
+  const confirmed = typed === cls.name
 
-  useEffect(() => {
-    fetchMembers()
-  }, [cls.id])
-
-  async function fetchMembers() {
+  async function handleDelete() {
+    if (!confirmed) return
     setLoading(true)
-    try {
-      const res  = await fetch(`/api/admin/members?classId=${cls.id}`)
-      const data = await res.json()
-      if (res.ok) setMembers(data.members || [])
-    } finally {
+    const res = await fetch(`/api/admin/classes/${cls.id}`, { method: 'DELETE' })
+    if (res.ok) { onDeleted(cls.id); onClose() }
+    else {
+      const d = await res.json()
+      setError(d.error || 'Failed.')
       setLoading(false)
     }
   }
 
-  async function addMember() {
-    if (!newFirst.trim() || !newLast.trim()) { setAddError('First and last name are required.'); return }
-    setAddLoading(true)
-    setAddError('')
-    try {
-      const res  = await fetch('/api/admin/members', {
-        method:  'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ firstName: newFirst.trim(), lastName: newLast.trim(), classId: cls.id }),
-      })
-      const data = await res.json()
-      if (!res.ok) { setAddError(data.error || 'Failed to add member.'); setAddLoading(false); return }
-      setMembers(p => [...p, data.member])
-      setNewFirst('')
-      setNewLast('')
-      setShowAddMember(false)
-    } finally {
-      setAddLoading(false)
-    }
-  }
-
-  async function toggleMember(id, isActive) {
-    await fetch(`/api/admin/members/${id}`, {
-      method:  'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ isActive: !isActive }),
-    })
-    setMembers(p => p.map(m => m.id === id ? { ...m, is_active: !isActive } : m))
-  }
-
-  async function regenerateCode() {
-    setRegenerating(true)
-    try {
-      const res  = await fetch(`/api/admin/classes/${cls.id}`, {
-        method:  'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ regenerateCode: true }),
-      })
-      const data = await res.json()
-      if (res.ok) {
-        setCurrentCode(data.class.code)
-        onUpdate({ ...cls, code: data.class.code })
-      }
-    } finally {
-      setRegenerating(false)
-    }
-  }
-
-  const activeMembers   = members.filter(m => m.is_active)
-  const inactiveMembers = members.filter(m => !m.is_active)
-
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
-      {/* Breadcrumb */}
-      <button
-        onClick={onBack}
-        style={{ display: 'flex', alignItems: 'center', gap: '6px', background: 'none', border: 'none', cursor: 'pointer', fontSize: fontSize.sm, fontWeight: '600', color: color.mist, padding: 0, width: 'fit-content' }}
-      >
-        <ArrowLeft size={15} /> All Classes
-      </button>
-
-      {/* Header card */}
-      <div style={{ background: '#fff', borderRadius: radius.lg, boxShadow: shadow.card, padding: '24px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
-          <div>
-            <h2 style={{ fontFamily: font.display, fontSize: fontSize.xl, color: color.navy, margin: '0 0 8px' }}>
-              {cls.name}
-            </h2>
-            <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-              {cls.group_name && <span className="badge badge-mist">{cls.group_name}</span>}
-              <span className="badge badge-green">{activeMembers.length} active members</span>
-            </div>
-          </div>
-
-          {/* Code box */}
-          <div style={{ background: color.navy, borderRadius: radius.lg, padding: '16px 20px', minWidth: '200px' }}>
-            <p style={{ fontSize: fontSize.xs, fontWeight: '700', color: 'rgba(245,240,232,0.5)', margin: '0 0 6px', letterSpacing: '0.07em', textTransform: 'uppercase' }}>
-              Class Code
-            </p>
-            <p style={{ fontFamily: font.display, fontSize: '26px', fontWeight: '700', color: color.cream, margin: '0 0 12px', letterSpacing: '0.1em' }}>
-              {formatCode(currentCode)}
-            </p>
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <CopyButton text={formatCode(currentCode)} />
-              <button
-                className="btn btn-sm"
-                onClick={regenerateCode}
-                disabled={regenerating}
-                style={{ background: 'rgba(245,240,232,0.1)', color: color.cream, border: 'none', gap: '5px' }}
-              >
-                <RefreshCw size={13} />
-                {regenerating ? '…' : 'New'}
-              </button>
-            </div>
-          </div>
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(10,26,61,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100, padding: '20px', backdropFilter: 'blur(2px)' }}>
+      <div style={{ background: color.white, borderRadius: radius['2xl'], padding: '28px', width: '100%', maxWidth: '420px', boxShadow: shadow.modal, animation: 'scaleIn 0.2s ease' }}>
+        <div style={{ width: '44px', height: '44px', borderRadius: radius.lg, background: color.errorBg, display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: '16px' }}>
+          <Trash2 size={20} color={color.error} />
         </div>
-      </div>
+        <h3 style={{ fontFamily: font.heading, fontSize: fontSize.lg, fontWeight: '700', color: color.ink, margin: '0 0 8px' }}>
+          Delete {cls.name}?
+        </h3>
+        <p style={{ fontSize: fontSize.sm, color: color.inkMuted, margin: '0 0 18px', fontFamily: font.body, lineHeight: 1.6 }}>
+          Deleting this class will remove all members from it. Attendance records are preserved. <strong>This cannot be undone.</strong>
+        </p>
 
-      {/* Members */}
-      <div style={{ background: '#fff', borderRadius: radius.lg, boxShadow: shadow.card, padding: '20px' }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
-          <p style={{ fontFamily: font.display, fontSize: fontSize.md, color: color.navy, margin: 0 }}>
-            Members ({members.length})
-          </p>
+        <label style={lbl}>Type <strong>{cls.name}</strong> to confirm</label>
+        <input
+          className="input"
+          placeholder={cls.name}
+          value={typed}
+          onChange={e => setTyped(e.target.value)}
+          style={{ background: color.cream, marginBottom: '14px' }}
+          autoFocus
+        />
+
+        {error && <p style={{ fontSize: fontSize.sm, color: color.error, margin: '0 0 12px', fontFamily: font.body }}>{error}</p>}
+
+        <div style={{ display: 'flex', gap: '10px' }}>
+          <button className="btn btn-cream btn-full" onClick={onClose} style={{ fontFamily: font.body }}>Cancel</button>
           <button
-            className="btn btn-primary btn-sm"
-            onClick={() => setShowAddMember(p => !p)}
-            style={{ gap: '6px' }}
+            onClick={handleDelete}
+            disabled={!confirmed || loading}
+            style={{
+              flex: 1, height: '44px', background: confirmed ? color.error : color.creamDark,
+              color: confirmed ? 'white' : color.inkSubtle,
+              border: 'none', borderRadius: radius.md, cursor: confirmed && !loading ? 'pointer' : 'not-allowed',
+              fontSize: fontSize.sm, fontWeight: '700', fontFamily: font.body, transition: 'all 0.15s',
+            }}
           >
-            <Plus size={14} /> Add Member
+            {loading ? 'Deleting…' : 'Delete Class'}
           </button>
         </div>
-
-        {/* Add member form */}
-        {showAddMember && (
-          <div style={{ background: color.cream, borderRadius: radius.md, padding: '16px', marginBottom: '16px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
-            <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-              <input
-                className="input"
-                placeholder="First name"
-                value={newFirst}
-                onChange={e => { setNewFirst(e.target.value); setAddError('') }}
-                style={{ flex: 1, minWidth: '140px', background: '#fff' }}
-                autoFocus
-              />
-              <input
-                className="input"
-                placeholder="Last name"
-                value={newLast}
-                onChange={e => { setNewLast(e.target.value); setAddError('') }}
-                onKeyDown={e => e.key === 'Enter' && addMember()}
-                style={{ flex: 1, minWidth: '140px', background: '#fff' }}
-              />
-            </div>
-            {addError && <p style={{ fontSize: fontSize.sm, color: color.error, fontWeight: '600', margin: 0 }}>{addError}</p>}
-            <div style={{ display: 'flex', gap: '8px' }}>
-              <button className="btn btn-secondary btn-sm" onClick={() => { setShowAddMember(false); setAddError('') }}>Cancel</button>
-              <button className="btn btn-primary btn-sm" onClick={addMember} disabled={addLoading}>
-                {addLoading ? 'Adding…' : 'Add Member'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {loading ? (
-          <SkeletonList count={3} height={56} />
-        ) : members.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '32px', color: color.mist }}>
-            <p style={{ fontSize: fontSize.base, margin: '0 0 4px' }}>No members yet</p>
-            <p style={{ fontSize: fontSize.sm, margin: 0 }}>Add your first member above.</p>
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '6px' }}>
-            {[...activeMembers, ...inactiveMembers].map(m => (
-              <div key={m.id} style={{
-                display: 'flex', alignItems: 'center', gap: '12px',
-                padding: '12px 14px', background: m.is_active ? color.cream : 'rgba(237,229,208,0.4)',
-                borderRadius: radius.md, opacity: m.is_active ? 1 : 0.6,
-              }}>
-                <div style={{
-                  width: '36px', height: '36px', borderRadius: '50%',
-                  background: m.is_active ? color.navy : color.creamDark,
-                  display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
-                }}>
-                  <span style={{ fontSize: '11px', fontWeight: '700', color: m.is_active ? color.cream : color.mist }}>
-                    {m.first_name[0]}{m.last_name[0]}
-                  </span>
-                </div>
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: fontSize.base, fontWeight: '600', color: color.navy, margin: 0 }}>
-                    {m.first_name} {m.last_name}
-                  </p>
-                  {!m.is_active && <p style={{ fontSize: fontSize.xs, color: color.mist, margin: 0 }}>Inactive</p>}
-                </div>
-                <button
-                  onClick={() => toggleMember(m.id, m.is_active)}
-                  className={`btn btn-sm ${m.is_active ? 'btn-danger' : 'btn-secondary'}`}
-                >
-                  {m.is_active ? 'Deactivate' : 'Reactivate'}
-                </button>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   )
 }
 
 // ── Class card ────────────────────────────────────────────────
-function ClassCard({ cls, onClick }) {
+function ClassCard({ cls, onEdit, onDelete, onCopy, onOpen }) {
   return (
-    <button onClick={onClick} style={{
-      background: '#fff', borderRadius: radius.lg, boxShadow: shadow.card,
-      padding: '20px', border: 'none', cursor: 'pointer', textAlign: 'left',
-      display: 'flex', flexDirection: 'column', gap: '14px',
-      transition: 'box-shadow 0.15s ease', width: '100%',
+    <div style={{
+      background: color.white, borderRadius: radius.xl,
+      border: `1px solid ${color.creamBorder}`, boxShadow: shadow.card,
+      padding: '16px 18px', display: 'flex', alignItems: 'center', gap: '14px', flexWrap: 'wrap',
     }}>
-      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '12px' }}>
-        <div style={{
-          width: '44px', height: '44px', borderRadius: '12px',
-          background: color.creamDark, display: 'flex', alignItems: 'center',
-          justifyContent: 'center', flexShrink: 0,
-        }}>
-          <Users size={20} color={color.navy} />
-        </div>
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <p style={{ fontSize: fontSize.md, fontWeight: '700', color: color.navy, margin: '0 0 4px' }}>{cls.name}</p>
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap' }}>
-            {cls.group_name && <span className="badge badge-mist">{cls.group_name}</span>}
-            <span className="badge badge-green">{cls.member_count || 0} members</span>
-          </div>
+      {/* Icon */}
+      <div style={{
+        width: '44px', height: '44px', borderRadius: radius.md, flexShrink: 0,
+        background: 'rgba(15,37,87,0.07)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: color.navy,
+      }}>
+        <BookOpen size={20} />
+      </div>
+
+      {/* Info */}
+      <div style={{ flex: 1, minWidth: '120px' }}>
+        <p style={{ fontFamily: font.heading, fontSize: fontSize.base, fontWeight: '700', color: color.ink, margin: '0 0 3px' }}>
+          {cls.name}
+        </p>
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
+          <span style={{ fontSize: fontSize.xs, color: color.inkSubtle, fontFamily: font.body }}>
+            {cls.member_count || 0} members
+          </span>
+          <span style={{ color: color.creamBorder }}>·</span>
+          {/* Code — monospace, copyable */}
+          <span style={{
+            fontFamily: 'monospace', fontSize: fontSize.xs, fontWeight: '700',
+            color: color.navy, background: 'rgba(15,37,87,0.07)', padding: '2px 8px', borderRadius: '4px',
+            letterSpacing: '0.1em',
+          }}>
+            {cls.code}
+          </span>
         </div>
       </div>
 
-      <div style={{ background: color.cream, borderRadius: radius.sm, padding: '10px 14px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <div>
-          <p style={{ fontSize: fontSize.xs, fontWeight: '700', color: color.mist, margin: '0 0 2px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>Code</p>
-          <p style={{ fontSize: fontSize.md, fontWeight: '700', color: color.navy, margin: 0, letterSpacing: '0.1em', fontFamily: font.display }}>{formatCode(cls.code)}</p>
-        </div>
-        <CopyButton text={formatCode(cls.code)} />
+      {/* Actions */}
+      <div style={{ display: 'flex', gap: '6px', flexShrink: 0 }}>
+        {/* Copy PIN */}
+        <button
+          onClick={() => onCopy(cls.code)}
+          title="Copy class code"
+          style={iconBtn}
+        >
+          <Copy size={15} color={color.inkMuted} />
+        </button>
+
+        {/* Edit */}
+        <button onClick={() => onEdit(cls)} title="Edit class" style={iconBtn}>
+          <Edit2 size={15} color={color.inkMuted} />
+        </button>
+
+        {/* Open as class */}
+        <button
+          onClick={() => onOpen(cls)}
+          title="Open class view"
+          style={{ ...iconBtn, background: 'rgba(15,37,87,0.07)', color: color.navy }}
+        >
+          <ExternalLink size={15} color={color.navy} />
+        </button>
+
+        {/* Delete */}
+        <button onClick={() => onDelete(cls)} title="Delete class" style={{ ...iconBtn, background: color.errorBg }}>
+          <Trash2 size={15} color={color.error} />
+        </button>
       </div>
-    </button>
+    </div>
   )
 }
 
-// ── Main page ─────────────────────────────────────────────────
 export default function ClassesPage() {
-  const [classes, setClasses]     = useState([])
-  const [loading, setLoading]     = useState(true)
-  const [error, setError]         = useState('')
+  const router = useRouter()
+
+  const [classes,    setClasses]    = useState([])
+  const [loading,    setLoading]    = useState(true)
   const [showCreate, setShowCreate] = useState(false)
-  const [selected, setSelected]   = useState(null)
+  const [editCls,    setEditCls]    = useState(null)
+  const [deleteCls,  setDeleteCls]  = useState(null)
+  const [toast,      setToast]      = useState('')
 
   const fetchClasses = useCallback(async () => {
     setLoading(true)
-    try {
-      const res  = await fetch('/api/admin/classes')
-      const data = await res.json()
-      if (res.ok) setClasses(data.classes || [])
-      else setError(data.error || 'Failed to load classes.')
-    } catch {
-      setError('Connection error.')
-    } finally {
-      setLoading(false)
-    }
+    const res  = await fetch('/api/admin/classes')
+    const data = await res.json()
+    if (res.ok) setClasses(data.classes || [])
+    setLoading(false)
   }, [])
 
   useEffect(() => { fetchClasses() }, [fetchClasses])
 
-  function handleCreated(newClass) {
-    setClasses(p => [{ ...newClass, member_count: 0 }, ...p])
+  function handleSaved(cls, isEdit) {
+    if (isEdit) setClasses(p => p.map(c => c.id === cls.id ? { ...c, ...cls } : c))
+    else        setClasses(p => [...p, cls])
   }
 
-  function handleUpdated(updated) {
-    setClasses(p => p.map(c => c.id === updated.id ? { ...c, ...updated } : c))
-    setSelected(prev => prev ? { ...prev, ...updated } : prev)
+  async function handleCopy(code) {
+    try {
+      await navigator.clipboard.writeText(code)
+      setToast('Class code copied!')
+    } catch {
+      // Fallback
+      const el = document.createElement('textarea')
+      el.value = code
+      document.body.appendChild(el)
+      el.select()
+      document.execCommand('copy')
+      document.body.removeChild(el)
+      setToast('Class code copied!')
+    }
   }
 
-  if (selected) {
-    return (
-      <ClassDetail
-        cls={selected}
-        onBack={() => setSelected(null)}
-        onUpdate={handleUpdated}
-      />
-    )
+  async function handleOpenAsClass(cls) {
+    const res = await fetch('/api/admin/impersonate', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ classId: cls.id }),
+    })
+    if (res.ok) {
+      window.open('/attendance?adminView=1', '_blank')
+    }
   }
+
+  // Group classes
+  const grouped = {}
+  for (const cls of classes) {
+    const g = cls.group_name || 'General'
+    if (!grouped[g]) grouped[g] = []
+    grouped[g].push(cls)
+  }
+  const groupKeys = Object.keys(grouped).sort()
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
-        <div>
-          <h1 style={s.pageTitle}>Classes</h1>
-          <p style={s.pageSub}>{classes.length} classes in your church</p>
-        </div>
-        <button className="btn btn-primary" onClick={() => setShowCreate(true)} style={{ gap: '8px' }}>
-          <Plus size={16} /> New Class
-        </button>
-      </div>
-
-      {error && (
-        <div style={{ background: color.errorBg, borderRadius: radius.md, padding: '14px 16px' }}>
-          <p style={{ fontSize: fontSize.sm, color: color.error, margin: 0 }}>{error}</p>
-        </div>
-      )}
+    <div>
+      <PageHeader
+        title="Classes"
+        subtitle="Manage your Sunday School classes"
+        action={
+          <button
+            className="btn btn-primary"
+            onClick={() => setShowCreate(true)}
+            style={{ gap: '7px', fontFamily: font.body }}
+          >
+            <Plus size={16} /> New Class
+          </button>
+        }
+      />
 
       {loading ? (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '14px' }}>
-          <SkeletonList count={3} height={160} />
-        </div>
+        <SkeletonList count={4} height={80} />
       ) : classes.length === 0 ? (
         <EmptyState
-          icon="🏫"
+          icon={<BookOpen size={28} />}
           title="No classes yet"
-          message="Create your first class to get started. Each class gets a unique code for teachers to log in."
-          action={{ label: 'Create First Class', onClick: () => setShowCreate(true) }}
+          message="Create your first class to get started."
+          action={{ label: 'Create Class', onClick: () => setShowCreate(true) }}
         />
       ) : (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '14px' }}>
-          {classes.map(cls => (
-            <ClassCard key={cls.id} cls={cls} onClick={() => setSelected(cls)} />
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '28px' }}>
+          {groupKeys.map(group => (
+            <div key={group}>
+              <div style={{
+                display:     'flex',
+                alignItems:  'center',
+                gap:         '10px',
+                marginBottom:'12px',
+                paddingBottom:'10px',
+                borderBottom:`1px solid ${color.creamBorder}`,
+              }}>
+                <h2 style={{
+                  fontFamily:   font.heading,
+                  fontSize:     fontSize.base,
+                  fontWeight:   '800',
+                  color:        color.navy,
+                  margin:       0,
+                  letterSpacing:'-0.01em',
+                }}>
+                  {group}
+                </h2>
+                <span style={{
+                  fontSize:     fontSize.xs,
+                  fontWeight:   '600',
+                  color:        color.inkSubtle,
+                  background:   color.creamDark,
+                  padding:      '2px 8px',
+                  borderRadius: radius.full,
+                }}>
+                  {grouped[group].length} class{grouped[group].length !== 1 ? 'es' : ''}
+                </span>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {grouped[group].map(cls => (
+                  <ClassCard
+                    key={cls.id}
+                    cls={cls}
+                    onEdit={c => setEditCls(c)}
+                    onDelete={c => setDeleteCls(c)}
+                    onCopy={handleCopy}
+                    onOpen={handleOpenAsClass}
+                  />
+                ))}
+              </div>
+            </div>
           ))}
         </div>
       )}
 
       {showCreate && (
-        <CreateClassModal
-          onClose={() => setShowCreate(false)}
-          onCreate={handleCreated}
-          classes={classes}
+        <ClassModal onClose={() => setShowCreate(false)} onSave={(c) => { handleSaved(c, false); setShowCreate(false) }} />
+      )}
+      {editCls && (
+        <ClassModal cls={editCls} onClose={() => setEditCls(null)} onSave={(c) => { handleSaved(c, true); setEditCls(null) }} />
+      )}
+      {deleteCls && (
+        <DeleteModal
+          cls={deleteCls}
+          onClose={() => setDeleteCls(null)}
+          onDeleted={id => { setClasses(p => p.filter(c => c.id !== id)); setDeleteCls(null) }}
         />
       )}
+      {toast && <Toast msg={toast} onDone={() => setToast('')} />}
+
+      <style>{`
+        @keyframes scaleIn { from { opacity:0; transform:scale(0.95); } to { opacity:1; transform:scale(1); } }
+        @keyframes slideUp  { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+      `}</style>
     </div>
   )
 }
 
-const s = {
-  pageTitle: { fontFamily: font.display, fontSize: fontSize.xl, color: color.navy, margin: '0 0 4px' },
-  pageSub:   { fontSize: fontSize.sm, color: color.mist, margin: 0 },
-  label:     { fontSize: '11px', fontWeight: '700', color: color.mist, letterSpacing: '0.07em', textTransform: 'uppercase' },
+const lbl = {
+  display:       'block',
+  fontSize:      fontSize.xs,
+  fontWeight:    '700',
+  color:         color.inkMuted,
+  letterSpacing: '0.06em',
+  textTransform: 'uppercase',
+  marginBottom:  '6px',
+  fontFamily:    font.body,
+}
+
+const iconBtn = {
+  width:          '34px',
+  height:         '34px',
+  borderRadius:   radius.sm,
+  border:         'none',
+  background:     color.creamDark,
+  display:        'flex',
+  alignItems:     'center',
+  justifyContent: 'center',
+  cursor:         'pointer',
+  transition:     'background 0.15s',
+  flexShrink:     0,
 }
