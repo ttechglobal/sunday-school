@@ -15,7 +15,14 @@ export async function GET() {
     .order('full_name', { nullsFirst: false })
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ members: data || [] })
+  return NextResponse.json({
+  members: (data || []).map(m => ({
+    ...m,
+    full_name: m.full_name ||
+      `${m.first_name || ''} ${m.last_name || ''}`.trim() ||
+      'Unknown',
+  }))
+})
 }
 
 export async function POST(request) {

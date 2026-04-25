@@ -567,39 +567,68 @@ function Toast({ message, onDone }) {
   )
 }
 
-// ── Past Sunday row ───────────────────────────────────────────
-function PastRow({ sunday, hidden, isLast }) {
+// ── Activity row ──────────────────────────────────────────────
+function ActivityRow({ batch, onReview, isLast }) {
+  const cls        = batch.classes
+  const isSubmitted = batch.status === 'pending'
+  const isApproved  = batch.status === 'approved'
+  const isRejected  = batch.status === 'rejected'
+
+  function formatTime(str) {
+    if (!str) return ''
+    return new Intl.DateTimeFormat('en-NG', { hour: '2-digit', minute: '2-digit', hour12: true }).format(new Date(str))
+  }
+
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '14px', padding: '14px 20px', borderBottom: isLast ? 'none' : `1px solid ${color.creamBorder}`, flexWrap: 'wrap' }}>
-      <div style={{ width: '40px', height: '40px', borderRadius: radius.md, background: 'rgba(15,37,87,0.06)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, color: color.navy }}>
-        <CalendarDays size={18} />
-      </div>
-      <div style={{ flex: 1, minWidth: '120px' }}>
-        <p style={{ fontFamily: font.heading, fontSize: fontSize.base, fontWeight: '700', color: color.ink, margin: '0 0 2px' }}>
-          {formatShortDate(sunday.date)}
-        </p>
-        <p style={{ fontSize: fontSize.xs, color: color.inkSubtle, margin: 0, fontFamily: font.body }}>
-          {sunday.classes} class{sunday.classes !== 1 ? 'es' : ''} approved
-        </p>
-      </div>
-      <div style={{ display: 'flex', gap: '20px' }}>
-        <div style={{ textAlign: 'right' }}>
-          <p style={{ fontFamily: font.heading, fontSize: fontSize.base, fontWeight: '700', color: color.navy, margin: 0, filter: hidden ? 'blur(5px)' : 'none', transition: 'filter 0.2s ease' }}>
-            {hidden ? '••' : sunday.present}
+    <div
+      onClick={isSubmitted ? () => onReview(batch) : undefined}
+      style={{
+        display:        'flex',
+        alignItems:     'center',
+        gap:            '14px',
+        padding:        '14px 20px',
+        borderBottom:   isLast ? 'none' : `1px solid ${color.creamBorder}`,
+        cursor:         isSubmitted ? 'pointer' : 'default',
+        transition:     'background 0.12s',
+        flexWrap:       'wrap',
+      }}
+      onMouseEnter={e => { if (isSubmitted) e.currentTarget.style.background = color.cream }}
+      onMouseLeave={e => { e.currentTarget.style.background = 'transparent' }}
+    >
+      {/* Class info */}
+      <div style={{ flex: 1, minWidth: '140px' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '3px', flexWrap: 'wrap' }}>
+          <p style={{ fontFamily: font.body, fontSize: fontSize.base, fontWeight: '700', color: color.ink, margin: 0 }}>
+            {cls?.name || '—'}
           </p>
-          <p style={{ fontSize: fontSize['2xs'], color: color.inkSubtle, margin: 0, textTransform: 'uppercase', letterSpacing: '0.04em', fontFamily: font.body }}>Present</p>
+          {cls?.group_name && (
+            <span style={{ fontSize: fontSize['2xs'], color: color.inkSubtle, background: color.creamDark, padding: '1px 8px', borderRadius: radius.full, fontWeight: '600' }}>
+              {cls.group_name}
+            </span>
+          )}
         </div>
-        <div style={{ textAlign: 'right' }}>
-          <p style={{ fontFamily: font.heading, fontSize: fontSize.base, fontWeight: '700', color: color.goldDark, margin: 0, filter: hidden ? 'blur(5px)' : 'none', transition: 'filter 0.2s ease' }}>
-            {hidden ? '₦ ••,•••' : `₦${Number(sunday.offering).toLocaleString('en-NG')}`}
+        {batch.submitted_at && (
+          <p style={{ fontSize: fontSize.xs, color: color.inkSubtle, margin: 0, fontFamily: font.body }}>
+            {isSubmitted ? 'Submitted' : isApproved ? 'Approved' : 'Rejected'} at {formatTime(batch.submitted_at)}
           </p>
-          <p style={{ fontSize: fontSize['2xs'], color: color.inkSubtle, margin: 0, textTransform: 'uppercase', letterSpacing: '0.04em', fontFamily: font.body }}>Offering</p>
-        </div>
+        )}
       </div>
+
+      {/* Stats */}
+      {batch.present_count !== undefined && (
+        <p style={{ fontSize: fontSize.sm, color: color.inkMuted, margin: 0, fontFamily: font.body, whiteSpace: 'nowrap' }}>
+          {batch.present_count}/{batch.record_count} present
+        </p>
+      )}
+
+      {/* Status */}
+      <StatusBadge status={batch.status} />
+
+      {/* Chevron for submitted */}
+      {isSubmitted && <ChevronRight size={16} color={color.inkSubtle} style={{ flexShrink: 0 }} />}
     </div>
   )
 }
-
 // ── Main page ─────────────────────────────────────────────────
 export default function DashboardPage() {
   const router = useRouter()
@@ -838,19 +867,63 @@ export default function DashboardPage() {
             )}
           </section>
 
-          {/* ── SECTION 3: Past Sundays (LAST) ── */}
-          {pastSundays.length > 0 && (
-            <section>
-              <h2 style={{ fontFamily: font.heading, fontSize: fontSize.lg, fontWeight: '800', color: color.ink, margin: '0 0 16px', letterSpacing: '-0.01em' }}>
-                Past Sundays
-              </h2>
-              <div style={{ background: color.white, borderRadius: radius.xl, border: `1px solid ${color.creamBorder}`, overflow: 'hidden' }}>
-                {pastSundays.map((s, i) => (
-                  <PastRow key={s.date} sunday={s} hidden={hidden} isLast={i === pastSundays.length - 1} />
-                ))}
-              </div>
-            </section>
-          )}
+         {/* ── SECTION 3: Today's Activity Feed ── */}
+<section>
+  <h2 style={{ fontFamily: font.heading, fontSize: fontSize.lg, fontWeight: '800', color: color.ink, margin: '0 0 4px', letterSpacing: '-0.01em' }}>
+    Today's Activity
+  </h2>
+  <p style={{ fontSize: fontSize.sm, color: color.inkMuted, margin: '0 0 14px', fontFamily: font.body }}>
+    Live status of all classes for today
+  </p>
+
+  {(() => {
+    // Build activity list: submitted+rejected first (need action), then approved, then classes with no submission (pending)
+    const submittedIds = new Set(pending.map(b => b.class_id))
+    const approvedIds  = new Set((data?.approvedBatches || []).map(b => b.class_id))
+
+    // pending = submitted, not yet reviewed
+    const needsAction = pending // already sorted by submitted_at desc
+    const approved    = (data?.approvedBatches || [])
+
+    if (!data?.totalClasses || data.totalClasses === 0) {
+      return (
+        <div style={{ padding: '32px 20px', textAlign: 'center', background: color.white, borderRadius: radius.xl, border: `1px solid ${color.creamBorder}` }}>
+          <p style={{ fontSize: fontSize.sm, color: color.inkMuted, margin: 0, fontFamily: font.body }}>
+            No active session today. Activity will appear here once classes begin submitting.
+          </p>
+        </div>
+      )
+    }
+
+    const allActivity = [
+      ...needsAction.map(b => ({ ...b, _sort: 0 })),
+      ...approved.map(b => ({ ...b, _sort: 1 })),
+    ].sort((a, b) => a._sort - b._sort)
+
+    if (allActivity.length === 0) {
+      return (
+        <div style={{ padding: '32px 20px', textAlign: 'center', background: color.white, borderRadius: radius.xl, border: `1px solid ${color.creamBorder}` }}>
+          <p style={{ fontSize: fontSize.sm, color: color.inkMuted, margin: 0, fontFamily: font.body }}>
+            No submissions yet today. Approved records will appear here as classes submit.
+          </p>
+        </div>
+      )
+    }
+
+    return (
+      <div style={{ background: color.white, borderRadius: radius.xl, border: `1px solid ${color.creamBorder}`, overflow: 'hidden' }}>
+        {allActivity.map((batch, i) => (
+          <ActivityRow
+            key={batch.id}
+            batch={batch}
+            onReview={sub => setReviewing(sub)}
+            isLast={i === allActivity.length - 1}
+          />
+        ))}
+      </div>
+    )
+  })()}
+</section>
 
         </div>
       )}

@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Users, BookOpen,
   FileText, BarChart2, Settings,
   Menu, X, LogOut, ChevronRight,
-  CheckSquare,
+  CheckSquare, UserCheck,
 } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { color, font, fontSize, radius } from '@/styles/tokens'
@@ -14,10 +14,11 @@ import { color, font, fontSize, radius } from '@/styles/tokens'
 const NAV = [
   { id: 'dashboard', label: 'Dashboard', href: '/dashboard',     Icon: LayoutDashboard },
   { id: 'approvals', label: 'Approvals', href: '/approvals',     Icon: CheckSquare     },
+  { id: 'first-timers', label: 'First Timers', href: '/first-timers', Icon: UserCheck },
   { id: 'records',   label: 'Records',   href: '/admin-records', Icon: FileText        },
   { id: 'classes',   label: 'Classes',   href: '/classes',       Icon: BookOpen        },
   { id: 'members',   label: 'Members',   href: '/members',       Icon: Users           },
-  { id: 'reports',   label: 'Reports',   href: '/reports',       Icon: BarChart2       },
+  { id: 'reports', label: 'Analytics', href: '/reports', Icon: BarChart2 },
   { id: 'settings',  label: 'Settings',  href: '/settings',      Icon: Settings        },
 ]
 

@@ -105,6 +105,20 @@ export async function GET() {
     .sort((a, b) => new Date(b.date) - new Date(a.date))
     .slice(0, 8)
 
+    // Approved today
+const { data: approvedTodayBatches } = await supabaseAdmin
+  .from('submission_batches')
+  .select(`
+    id, status, submitted_at, present_count, record_count, total_offering,
+    class_id, session_id,
+    classes ( id, name, group_name ),
+    sessions ( id, session_date )
+  `)
+  .eq('church_id', admin.churchId)
+  .eq('status',    'approved')
+  .eq('session_id', session?.id || '00000000-0000-0000-0000-000000000000')
+  .order('submitted_at', { ascending: false })
+
   return NextResponse.json({
     church,
     churchName: church?.name || '',
@@ -120,5 +134,7 @@ export async function GET() {
       totalOffering,
     },
     pastSundays: pastSundayList,
+    // ... existing fields
+  approvedBatches: approvedTodayBatches || [],
   })
 }
